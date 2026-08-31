@@ -106,12 +106,13 @@ async def main():
             core.supervise("diag_task", net.diag_task),
             core.supervise("connection_watchdog", net.connection_watchdog),
         ]
-    tasks.append(core.supervise("ota_boot_check", _ota_boot_check))
+    if ota.enabled():
+        tasks.append(core.supervise("ota_boot_check", _ota_boot_check))
     await uasyncio.gather(*tasks)
 
 
 async def _ota_boot_check():
-    # one-shot: check GitHub for a newer version a few seconds after boot
+    # one-shot: check the mirror for a newer version a few seconds after boot
     # (establish_link already wired ota._on_change when MQTT is on). Never
     # auto-installs. Then idle forever — supervise keeps the coro alive.
     await uasyncio.sleep_ms(8000)

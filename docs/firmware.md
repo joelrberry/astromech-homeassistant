@@ -104,7 +104,7 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Sound (select, 7 folders + idle) | `<prefix>/sound/command` `{"sound": …}` | `<prefix>/sound/state` |
 | Volume (number 0–30) | `<prefix>/sound/volume/set` | `<prefix>/sound/volume/state` |
 | Debug logging (switch) | `<prefix>/debug/set` | `<prefix>/debug/state` |
-| Firmware (update) | `<prefix>/ota/set` `install` | `<prefix>/ota` |
+| Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
 | Diagnostics (12 sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
 
@@ -120,9 +120,9 @@ web panel, and any future button all call them.
 Async HTTP on port 80, always up (with or without MQTT). Reach it at the IP
 logged on boot, or `http://<hostname>.local/` (best-effort mDNS via
 `network.hostname()`). Mode + sound buttons (sound button lights while
-playing), volume slider, live-polled state, a **Diagnostics** readout, and a
-**Firmware** section (installed → latest, Update button). Optional `web_pin`
-gates the state-changing POSTs.
+playing), volume slider, live-polled state, and a **Diagnostics** readout. A
+**Firmware** section (installed → latest, Update button) appears only when
+`ota_url` is set. Optional `web_pin` gates the state-changing POSTs.
 
 ## Servo — `app/servo.py`
 
@@ -159,23 +159,41 @@ RSSI, IP, WiFi SSID + channel, MCU temp, time-synced, task-restart count,
 reconnect count. Published to `<prefix>/diag` every 30 s (HA diagnostic
 sensors) and served at `GET /diag`. Reset cause is a one-shot retained publish.
 
-## OTA — `app/ota.py`
+## Updating
 
-Pulls `app/` + `lib/` from this repo's `main` branch via `mip`.
-`boot.py` and root `main.py` are **not** OTA-managed (USB flash only) so the
-bootstrap + rollback code is always known-good.
+**Normal path: USB** — `python3 tools/deploy.py` (see *Getting it onto a
+board* above). That's the whole update story for most builds.
 
-- **Version**: `app/version.py` `VERSION`. A release = bump it, commit, push.
-- **Manifest**: `droidrefit/package.json` (raw GitHub URLs).
-- `check()` fetches the raw `version.py`, compares. `update()` backs the
-  managed files up to `/bak`, runs `mip.install`, writes `/ota.flag`, reboots.
-  If the new build crash-loops (3 boots), `/main.py` restores `/bak`.
-  `app/main.py` calls `ota.confirm()` (clears the flag + `/bak`) once the link
-  is up.
-- **Triggers**: HA Update entity, web-panel Update button, MQTT
-  `<prefix>/ota/set`, and an 8-second-post-boot auto-check that only reports.
-- `core.cfg["ota_url"]` overrides the source (a local HTTP mirror) if GitHub
-  TLS is tight on RAM.
+### On-device OTA — `app/ota.py`, opt-in
+
+Off unless `core.cfg["ota_url"]` is set (`config.save({"ota_url": "..."})` from
+the REPL). `ota.enabled()` gates the HA Update entity, the web-panel Firmware
+section, the `<prefix>/ota/set` subscription, and the boot auto-check — with no
+`ota_url` none of that is published, so there's no dead button.
+
+**Why opt-in:** a classic ESP32 can't complete a TLS handshake to GitHub while
+the app is running. mbedTLS needs ~16 KB *contiguous* and MicroPython's GC
+doesn't compact, so even with ~65 KB free the allocation fails `ENOMEM`. OTA
+therefore pulls **plain HTTP from a LAN mirror** — any static server over the
+`droidrefit/` tree (`python3 -m http.server` in the repo root, or drop it in
+Home Assistant's `config/www/`). `ota_url` is that base, e.g.
+`http://homeassistant.local:8123/local/droidrefit`. The `mip`/GitHub path is
+still in the code for PSRAM boards (S2/S3) but untested there.
+
+- **Version**: `app/version.py` `VERSION`. A release = bump it, commit, push,
+  refresh the mirror.
+- **Manifest**: `droidrefit/package.json` — `check()` reads `version.py`,
+  `_http_pull()` downloads each listed path to `<path>.ota` then renames them
+  all in once every file has arrived (a mid-download failure leaves the running
+  build intact).
+- **Backup / rollback**: `update()` copies the managed files to `/bak` and
+  writes `/ota.flag`; root `/main.py` counts boots in it and restores `/bak`
+  after 3 failures (a crash while `/ota.flag` exists forces a reset so the
+  counter advances). `app/main.py` calls `ota.confirm()` once the link is up.
+  `boot.py` and root `main.py` are **not** OTA-managed — USB flash only — so
+  the bootstrap + rollback are always known-good.
+- **Known gap**: a bad build that *hangs* rather than crashes never advances
+  the boot counter — recovery there is `noboot.txt` or a USB re-flash.
 
 ## Bench tools — `droidrefit/bench/`
 

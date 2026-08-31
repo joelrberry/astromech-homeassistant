@@ -43,14 +43,16 @@ from a phone, the setup page opens, enter WiFi + a droid name (tick "Connect to
 Home Assistant" for the MQTT broker fields), save. It reboots onto your network:
 
 - **Home Assistant** auto-discovers it over MQTT — a Mode select, Sound select,
-  Volume, plus diagnostic and firmware-update entities.
+  Volume, plus diagnostic sensors.
 - **Web panel** at `http://<hostname>.local/` (or the IP printed on the serial
   console) — same controls, works with or without Home Assistant.
 
-After an edit, just `python3 tools/deploy.py`. Once a droid is deployed,
-updates are **over-the-air** from this repo's `main` branch (bump
-`droidrefit/app/version.py`, commit, push — the droid offers the update in HA
-and the web panel). Full detail in [docs/firmware.md](docs/firmware.md).
+**Updates go over USB** — after an edit, `python3 tools/deploy.py`. On-device
+OTA exists but is opt-in and off by default: a classic ESP32 can't do TLS to
+GitHub while the app runs (heap fragmentation — mbedTLS can't get a contiguous
+block), so OTA only works against a plain-HTTP mirror on your LAN. Set
+`ota_url` in the droid's config to enable it; then an HA Update entity and a
+web-panel Firmware section appear. Detail in [docs/firmware.md](docs/firmware.md).
 
 ## Recovery
 

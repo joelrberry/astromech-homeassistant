@@ -121,7 +121,7 @@ def on_mqtt_message(topic, msg):
         apply_volume(level)
         return
 
-    if topic == MQTT_OTA_SET_TOPIC:
+    if topic == MQTT_OTA_SET_TOPIC and ota.enabled():
         cmd = msg.strip().lower()
         if cmd in (b'install', b'update'):
             uasyncio.create_task(ota.update())
@@ -312,14 +312,15 @@ def publish_discovery(client):
         "state_topic": MQTT_HEARTBEAT_TOPIC.decode(),
         "expire_after": 180,
     })
-    emit(_disc('update', 'firmware'), {
-        "name": "Firmware",
-        "unique_id": "firmware_update",
-        "state_topic": MQTT_OTA_STATE_TOPIC.decode(),
-        "command_topic": MQTT_OTA_SET_TOPIC.decode(),
-        "payload_install": "install",
-        "entity_category": "config",
-    })
+    if ota.enabled():
+        emit(_disc('update', 'firmware'), {
+            "name": "Firmware",
+            "unique_id": "firmware_update",
+            "state_topic": MQTT_OTA_STATE_TOPIC.decode(),
+            "command_topic": MQTT_OTA_SET_TOPIC.decode(),
+            "payload_install": "install",
+            "entity_category": "config",
+        })
 
     # --- diagnostic sensors: all read one JSON blob, land in HA's collapsed
     #     "Diagnostic" section on the device page ---
@@ -426,14 +427,16 @@ async def establish_link():
     client.subscribe(MQTT_SOUND_COMMAND_TOPIC)
     client.subscribe(MQTT_VOLUME_SET_TOPIC)
     client.subscribe(MQTT_DIAG_SET_TOPIC)
-    client.subscribe(MQTT_OTA_SET_TOPIC)
+    if ota.enabled():
+        client.subscribe(MQTT_OTA_SET_TOPIC)
     core.conn["client"] = client
     core.link_state["down"] = False
 
     client.publish(MQTT_AVAILABILITY_TOPIC, b'online', retain=True)
     client.publish(MQTT_RESET_CAUSE_TOPIC, diag.RESET_CAUSE.encode(), retain=True)
     publish_discovery(client)
-    ota._on_change = publish_ota_state
-    publish_ota_state()
+    if ota.enabled():
+        ota._on_change = publish_ota_state
+        publish_ota_state()
     core.log_always("[link] established, subscribed + discovery published")
     return client

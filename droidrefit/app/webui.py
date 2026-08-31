@@ -44,6 +44,13 @@ def _page():
     sbtns = "".join("<button data-sound=\"%s\">%s</button>" % (s, s) for s in _SOUNDS)
     pin_row = ("<input id=pin type=password placeholder='control PIN' "
                "autocomplete=off>") if core.cfg.get("web_pin") else ""
+    # Firmware section only when on-device OTA is configured (see ota.enabled()).
+    fw_html = (
+        "<h2>Firmware</h2><div id=fw class=row>"
+        "<span id=fwtxt>checking...</span>"
+        "<button id=fwchk>Check</button><button id=fwupd hidden>Update</button></div>"
+    ) if ota.enabled() else ""
+    fw_js = _FW_JS if ota.enabled() else ""
     return (
         "<!doctype html><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -54,13 +61,11 @@ def _page():
         "<h2>Sound</h2><div class=grid id=sounds>%s</div>"
         "<h2>Volume <span id=vlab></span></h2>"
         "<div class=row><input type=range id=vol min=0 max=30></div>"
-        "<h2>Firmware</h2><div id=fw class=row>"
-        "<span id=fwtxt>checking...</span>"
-        "<button id=fwchk>Check</button><button id=fwupd hidden>Update</button></div>"
+        "%s"
         "<h2>Diagnostics</h2><pre id=diag>...</pre>"
-        "<script>%s</script>"
+        "<script>%s%s</script>"
         % (core.cfg["device_name"], _STYLE, core.cfg["device_name"],
-           pin_row, mbtns, sbtns, _JS))
+           pin_row, mbtns, sbtns, fw_html, _JS, fw_js))
 
 
 _JS = """
@@ -88,6 +93,29 @@ E('#vol').addEventListener('change',function(){post('volume='+this.value)});
 E('#vol').addEventListener('input',function(){E('#vlab').textContent=this.value});
 function poll(){fetch('/state').then(function(r){return r.json()}).then(render).catch(function(){})}
 poll();setInterval(poll,1500);
+function fmtdur(s){var h=s/3600|0,m=s%3600/60|0;return h?(h+'h '+m+'m'):(m+'m '+(s%60|0)+'s')}
+function fmtb(b){return b>1048576?(b/1048576).toFixed(1)+' MB':(b/1024|0)+' KB'}
+function drender(d){
+ var L=[];
+ L.push('uptime      '+fmtdur(d.uptime_s));
+ L.push('reset       '+d.reset_cause);
+ L.push('free heap   '+fmtb(d.heap_free)+'  ('+d.heap_free_pct+'%)');
+ if(d.fs_free!=null)L.push('free flash  '+fmtb(d.fs_free)+(d.fs_total?(' / '+fmtb(d.fs_total)):''));
+ if(d.ip)L.push('ip          '+d.ip);
+ if(d.ssid)L.push('wifi        '+d.ssid+(d.channel?(' ch'+d.channel):'')+(d.rssi!=null?('  '+d.rssi+' dBm'):''));
+ else if(d.rssi!=null)L.push('wifi        '+d.rssi+' dBm');
+ L.push('time sync   '+(d.time_synced?'yes':'no'));
+ L.push('restarts    '+d.task_restarts+'   reconnects '+d.reconnects);
+ if(d.mcu_temp_c!=null)L.push('mcu temp    '+d.mcu_temp_c+' \\u00b0C');
+ L.push('cpu         '+d.cpu_mhz+' MHz');
+ E('#diag').textContent=L.join('\\n');
+}
+function dpoll(){fetch('/diag').then(function(r){return r.json()}).then(drender).catch(function(){})}
+dpoll();setInterval(dpoll,15000);
+"""
+
+# appended to _JS only when ota.enabled() — the Firmware section's script
+_FW_JS = """
 function fw(action){
  var b=action?('action='+action):'';
  return fetch('/ota',{method:action?'POST':'GET',
@@ -108,25 +136,6 @@ E('#fwchk').addEventListener('click',function(){fw('check')});
 E('#fwupd').addEventListener('click',function(){
  if(confirm('Update firmware and reboot?'))fw('install')});
 fw();setInterval(fw,5000);
-function fmtdur(s){var h=s/3600|0,m=s%3600/60|0;return h?(h+'h '+m+'m'):(m+'m '+(s%60|0)+'s')}
-function fmtb(b){return b>1048576?(b/1048576).toFixed(1)+' MB':(b/1024|0)+' KB'}
-function drender(d){
- var L=[];
- L.push('uptime      '+fmtdur(d.uptime_s));
- L.push('reset       '+d.reset_cause);
- L.push('free heap   '+fmtb(d.heap_free)+'  ('+d.heap_free_pct+'%)');
- if(d.fs_free!=null)L.push('free flash  '+fmtb(d.fs_free)+(d.fs_total?(' / '+fmtb(d.fs_total)):''));
- if(d.ip)L.push('ip          '+d.ip);
- if(d.ssid)L.push('wifi        '+d.ssid+(d.channel?(' ch'+d.channel):'')+(d.rssi!=null?('  '+d.rssi+' dBm'):''));
- else if(d.rssi!=null)L.push('wifi        '+d.rssi+' dBm');
- L.push('time sync   '+(d.time_synced?'yes':'no'));
- L.push('restarts    '+d.task_restarts+'   reconnects '+d.reconnects);
- if(d.mcu_temp_c!=null)L.push('mcu temp    '+d.mcu_temp_c+' \\u00b0C');
- L.push('cpu         '+d.cpu_mhz+' MHz');
- E('#diag').textContent=L.join('\\n');
-}
-function dpoll(){fetch('/diag').then(function(r){return r.json()}).then(drender).catch(function(){})}
-dpoll();setInterval(dpoll,15000);
 """
 
 
@@ -206,7 +215,7 @@ async def _handle(reader, writer):
             await _send(writer, 200, "application/json", _state())
         elif path == "/diag":
             await _send(writer, 200, "application/json", ujson.dumps(diag.snapshot()))
-        elif path == "/ota" and method == "GET":
+        elif path == "/ota" and method == "GET" and ota.enabled():
             await _send(writer, 200, "application/json", ujson.dumps(ota.state))
         elif path == "/set" and method == "POST":
             form = await _read_form(reader, headers)
@@ -221,7 +230,7 @@ async def _handle(reader, writer):
                 elif "volume" in form:
                     net.apply_volume(form["volume"])
                 await _send(writer, 200, "application/json", _state())
-        elif path == "/ota" and method == "POST":
+        elif path == "/ota" and method == "POST" and ota.enabled():
             form = await _read_form(reader, headers)
             wp = core.cfg.get("web_pin")
             if wp and form.get("pin") != wp:

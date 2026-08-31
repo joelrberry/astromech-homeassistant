@@ -43,6 +43,17 @@ state = {"installed": version.VERSION, "latest": None, "status": "idle", "msg": 
 _on_change = None          # net sets this -> called after each state change
 
 
+def enabled():
+    # On-device OTA is opt-in: it only works against an HTTP mirror (classic
+    # ESP32 can't TLS to GitHub with the app running). No ota_url -> no HA
+    # Update entity, no web-panel Firmware section, no boot check. Updates go
+    # over USB via tools/deploy.py instead.
+    try:
+        return bool(core.cfg.get("ota_url"))
+    except Exception:
+        return False
+
+
 def _touch():
     if _on_change:
         try:
