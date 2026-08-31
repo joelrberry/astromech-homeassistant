@@ -116,7 +116,7 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Debug logging (switch) | `<prefix>/debug/set` | `<prefix>/debug/state` |
 | Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
-| Diagnostics (12 sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
+| Diagnostics (13 sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
 
 `<prefix>/log` carries `log_always()` output (queued and drained one line per
 ~20 ms so bursts don't truncate on the socket). Availability is re-asserted
@@ -166,8 +166,18 @@ tracks), so the UI can un-light the button.
 
 `snapshot()` → reset cause, uptime, free heap (%), free/total flash, CPU MHz,
 RSSI, IP, WiFi SSID + channel, MCU temp, time-synced, task-restart count,
-reconnect count. Published to `<prefix>/diag` every 30 s (HA diagnostic
-sensors) and served at `GET /diag`. Reset cause is a one-shot retained publish.
+reconnect count, WiFi-association count (`wifi_assoc` — climbs on every
+re-association; a flapping-link tell). Published to `<prefix>/diag` every 30 s
+(HA diagnostic sensors) and served at `GET /diag`. Reset cause is a one-shot
+retained publish — note that on a **classic ESP32 a brownout reports as
+power-on**, so a brownout and a real power-cycle look identical here; the
+serial console (`Brownout detector was triggered`) is the only tell, see
+`tools/serial-log.py`.
+
+Every WiFi re-association bumps `core.net_generation`; `webui.web_server_task`
+watches it and rebuilds its listening socket, because a WiFi drop can leave
+`asyncio.start_server`'s accept loop wedged (stops accepting, never raises, so
+`supervise` can't restart it).
 
 ## Updating
 

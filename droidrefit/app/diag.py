@@ -74,6 +74,7 @@ def snapshot():
     d["time_synced"] = bool(core._time_synced)
     d["task_restarts"] = sum(core.task_restarts.values())
     d["reconnects"] = core.reconnects
+    d["wifi_assoc"] = core.net_generation   # WiFi (re)association count — flapping tell
     if network is not None:
         try:
             w = network.WLAN(network.STA_IF)

@@ -254,15 +254,36 @@ async def _handle(reader, writer):
 _server = None
 
 
-async def web_server_task():
+async def _close_server():
     global _server
-    if _server is not None:          # a supervise() restart — free the old socket
+    if _server is not None:
         try:
             _server.close()
-            await _server.wait_closed()
+            await uasyncio.wait_for(_server.wait_closed(), 3)
         except Exception:
-            pass
+            pass                        # incl. TimeoutError — don't hang on a wedged one
         _server = None
-    _server = await uasyncio.start_server(_handle, "0.0.0.0", _PORT)
-    core.log_always("[web] control panel on :%d" % _PORT)
-    await _server.wait_closed()
+
+
+async def web_server_task():
+    # start_server's accept loop can wedge silently after a WiFi drop — the
+    # listening socket goes stale, never becomes readable, never errors, so the
+    # task just sits in wait_closed() forever (no crash -> supervise can't help).
+    # Instead: (re)build the listener whenever the network re-associates
+    # (core.net_generation), and never block on wait_closed().
+    global _server
+    await _close_server()               # a supervise() restart may leave one bound
+    built_gen = -1
+    while True:
+        if _server is None or built_gen != core.net_generation:
+            await _close_server()
+            try:
+                _server = await uasyncio.start_server(_handle, "0.0.0.0", _PORT)
+                built_gen = core.net_generation
+                core.log_always("[web] control panel on :%d (net gen %d)"
+                                % (_PORT, built_gen))
+            except OSError as e:
+                core.log_always("[web] listen failed, retry in 5s:", e)
+                await uasyncio.sleep_ms(5000)
+                continue
+        await uasyncio.sleep_ms(3000)

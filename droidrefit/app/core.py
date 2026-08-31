@@ -39,6 +39,11 @@ link_state = {"down": False}
 task_restarts = {}   # task name -> times supervise() has restarted it
 reconnects = 0       # times connection_watchdog ran a full reconnect
 
+# bumped on every WiFi (re)association (net.wifi_monitor_task / connect_wifi).
+# webui.web_server_task watches this and rebuilds its listening socket — a
+# WiFi blip can leave the old listener wedged (accepts nothing, raises nothing).
+net_generation = 0
+
 cfg = None          # the loaded config dict — set by init()
 _time_synced = False
 

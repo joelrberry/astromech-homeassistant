@@ -353,6 +353,8 @@ def publish_discovery(client):
                 state_class="total_increasing")
     diag_sensor("reconnects", "Reconnects", "reconnects",
                 state_class="total_increasing")
+    diag_sensor("wifi_assoc", "WiFi Associations", "wifi_assoc",
+                state_class="total_increasing")
     emit(_disc('sensor', 'reset_cause'), {
         "name": "Reset Cause", "unique_id": "reset_cause",
         "state_topic": MQTT_RESET_CAUSE_TOPIC.decode(),
@@ -390,7 +392,41 @@ async def connect_wifi():
     ip = wlan.ifconfig()[0] if wlan.isconnected() else "?"
     core.log_always("[wifi] connected:", wlan.isconnected(), "  control page: http://%s/  (http://%s.local/)"
                     % (ip, core.cfg["hostname"]))
+    if wlan.isconnected():
+        core.net_generation += 1
     core.sync_time()
+
+
+async def wifi_monitor_task():
+    # The ESP32 auto-reconnects WiFi on its own, often without connection_watchdog
+    # ever calling connect_wifi(). Catch that False->True edge too so webui can
+    # rebuild a listener that the drop left stale.
+    wlan = network.WLAN(network.STA_IF)
+    was = wlan.isconnected()
+    while True:
+        await uasyncio.sleep_ms(2000)
+        now = wlan.isconnected()
+        if now and not was:
+            core.net_generation += 1
+            core.log_always("[wifi] reassociated (net gen %d)" % core.net_generation)
+        was = now
+
+
+def _hard_close(client):
+    # umqtt.simple.disconnect() is `sock.write(...); sock.close()` — if the link
+    # is already dead the write raises and close() never runs, leaking the fd.
+    # MicroPython doesn't reliably close sockets on GC, so a night of reconnects
+    # exhausts the ~8-16 socket pool. Force the close in its own guard.
+    if client is None:
+        return
+    try:
+        client.disconnect()
+    except Exception:
+        pass
+    try:
+        client.sock.close()
+    except Exception:
+        pass
 
 
 async def connect_mqtt():
@@ -408,17 +444,17 @@ async def connect_mqtt():
             return client
         except Exception as e:
             core.log_always("[mqtt] connect attempt", attempt + 1, "failed:", e)
+            try:
+                client.sock.close()      # umqtt leaves it open on a failed connect
+            except Exception:
+                pass
             await uasyncio.sleep_ms(2000)
     raise RuntimeError("Could not connect to MQTT after 5 attempts")
 
 
 async def establish_link():
-    old_client = core.conn["client"]
-    if old_client is not None:
-        try:
-            old_client.disconnect()
-        except Exception:
-            pass  # already dead — that's exactly why we're here
+    _hard_close(core.conn["client"])    # free the old socket before making a new one
+    core.conn["client"] = None
 
     await connect_wifi()
     client = await connect_mqtt()

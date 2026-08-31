@@ -96,6 +96,7 @@ async def main():
         core.supervise("busy_monitor_task", sound.busy_monitor_task),
         core.supervise("reset_button_task", reset_button_task),
         core.supervise("log_task", core.log_task),
+        core.supervise("wifi_monitor_task", net.wifi_monitor_task),
         core.supervise("web_server_task", webui.web_server_task),
     ]
     if mqtt:
