@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "urls": [
+    ["app/__init__.py",     "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/__init__.py"],
+    ["app/version.py",      "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/version.py"],
+    ["app/config.py",       "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/config.py"],
+    ["app/core.py",         "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/core.py"],
+    ["app/hw.py",           "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/hw.py"],
+    ["app/diag.py",         "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/diag.py"],
+    ["app/sound.py",        "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/sound.py"],
+    ["app/servo.py",        "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/servo.py"],
+    ["app/leds.py",         "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/leds.py"],
+    ["app/ota.py",          "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/ota.py"],
+    ["app/net.py",          "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/net.py"],
+    ["app/webui.py",        "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/webui.py"],
+    ["app/provisioning.py", "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/provisioning.py"],
+    ["app/main.py",         "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/app/main.py"],
+    ["lib/dfplayer.py",     "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/lib/dfplayer.py"],
+    ["lib/umqtt/simple.py", "https://raw.githubusercontent.com/joelrberry/CyberBrick-HomeAssistant-MQTT/main/droidrefit/lib/umqtt/simple.py"]
+  ]
+}

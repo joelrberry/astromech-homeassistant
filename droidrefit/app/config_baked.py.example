@@ -1,0 +1,33 @@
+# Bench / development config. Copy to _baked.py (same directory) and fill in.
+# _baked.py is gitignored — never commit real credentials.
+#
+# Used ONLY as a fallback when /config.json is absent (you haven't run the
+# first-run setup portal). Production units are configured through the portal
+# and store /config.json instead; this file is ignored there.
+#
+# Preferred form — a CONFIG dict (any omitted key falls back to config._DEFAULTS):
+
+CONFIG = {
+    "wifi_ssid": "your-wifi-ssid",
+    "wifi_pass": "your-wifi-password",
+    "device_name": "R2-D2",
+
+    # Home Assistant / MQTT is optional. Leave mqtt_enabled False to run the
+    # droid standalone (local web control panel only).
+    "mqtt_enabled": True,
+    "mqtt_broker": "192.168.1.10",
+    "mqtt_port": 1883,
+    "mqtt_user": "r2d2",
+    "mqtt_pass": "your-mqtt-password",
+
+    # Optional: pin the MQTT client id / topic prefix. Defaults to a
+    # MAC-derived id like "r2d2-a1b2c3". Set both to "r2d2" to keep the bare
+    # r2d2/... topic tree of a pre-provisioning single-unit deployment.
+    # "device_id": "r2d2",
+    # "topic_prefix": "r2d2",
+
+    "configured": True,
+}
+
+# Legacy flat constants (WIFI_SSID, WIFI_PASSWORD, MQTT_BROKER, MQTT_PORT,
+# MQTT_USER, MQTT_PASSWORD, MQTT_CLIENT_ID) are also still accepted.
