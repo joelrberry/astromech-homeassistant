@@ -1,6 +1,6 @@
 # Controlling a CyberBrick Astromech Droid from Home Assistant
 
-This is a writeup of how I replaced the stock CyberBrick RC firmware on an astromech droid build with custom MicroPython that connects directly to Home Assistant over WiFi/MQTT — no physical remote control involved. The droid now runs five distinct "reactions" (standby, excited, surveillance, alert, sleep), each with independently animated dome lights and a servo sweep, all switchable from a Home Assistant dashboard.
+This is a writeup of how I replaced the stock CyberBrick RC firmware on an astromech droid build with custom MicroPython that connects directly to Home Assistant over WiFi/MQTT — no physical remote control involved. The droid runs nine distinct "reactions" (`standby`, `awake`, `excited`, `surveillance`, `alert`, `sleep`, `system_crash`, `system_crash_extreme`, `hologram`), each with independently animated dome lights and a servo behavior, all switchable from a Home Assistant dashboard.
 
 If you've got a [CyberBrick](https://makerworld.com/en/cyberbrick) core board driving some kind of prop or droid and want smart-home control instead of (or in addition to) the RF remote, this should get you most of the way there.
 
@@ -19,10 +19,35 @@ This is **not** third-party firmware flashing (which CyberBrick explicitly warns
 Architecture:
 
 ```
-Home Assistant  →  MQTT (Mosquitto)  →  CyberBrick core (custom boot.py)  →  /bbl drivers  →  LEDs + servo
+Home Assistant  →  MQTT (Mosquitto)  →  CyberBrick core (custom boot.py/main.py)  →  /bbl drivers  →  LEDs + servo
 ```
 
 No transmitter, no receiver pairing, no bridge hardware. The board joins your WiFi, subscribes to an MQTT command topic, and drives the hardware directly.
+
+## Project structure
+
+This repo mirrors the device's own root filesystem — copy it straight onto the board's storage as-is:
+
+```
+boot.py                   # trivial bootstrap: import main
+main.py                   # everything else — WiFi/MQTT, reaction dispatch, LED/servo engines
+config/
+    __init__.py.example    # checked in — placeholder WiFi/MQTT values
+    __init__.py            # gitignored — your real credentials, not tracked
+umqtt/
+    simple.py             # vendored from micropython-lib (see Acknowledgments)
+```
+
+Before flashing, set up your own credentials:
+
+```sh
+cp config/__init__.py.example config/__init__.py
+# then edit config/__init__.py with your real WiFi SSID/password and MQTT broker/user/password
+```
+
+`config/__init__.py` is gitignored on purpose — it never gets committed, so your credentials don't end up in git history or on a public remote. `main.py` pulls them in with `from config import (WIFI_SSID, WIFI_PASSWORD, ...)`.
+
+It has to be `__init__.py`, not e.g. `config.py` inside that folder. MicroPython treats any directory with no `__init__.py` as a valid (empty) "namespace package" — so `import config` would resolve straight to the empty `config/` directory *before* ever looking inside it for a same-named submodule, and `from config import WIFI_SSID` would fail with `ImportError: no module named 'config.WIFI_SSID'`. Putting the values directly in `__init__.py` sidesteps that: it's what actually runs when the package itself is imported, so there's no separate submodule left to be shadowed.
 
 ## What I initially considered (and abandoned)
 
@@ -86,8 +111,17 @@ servos.set_angle_stepping(servo_idx, angle, step_speed) # gradual move
 ```
 
 - **Real bug found in this file**: `timing_proc()`'s logic to clear the internal `step_en` flag back to `False` on arrival is nested inside a conditional that becomes false exactly when the servo *has* arrived — so `step_en` never actually clears, and polling it to detect "movement finished" doesn't work as the docstring implies.
-- **Workaround used**: skip `set_angle_stepping()`/`timing_proc()` entirely for continuous motion (like a sweep). Just call `set_angle()` repeatedly from your own loop with your own step size and delay — simpler and fully predictable.
-- Also: the docstring for `reset_info()` claims a default rotation speed of 4 rad/sec; the actual code default is `8.05` — worth knowing if you're tuning speed via that path (irrelevant if you use the `set_angle()` workaround above).
+- **Second bug**: `set_angle()` uses MicroPython's 10-bit `.duty()` (0-1023), but only spans values 25-127 across the full 0-180° range — about 0.57 duty units per degree, so most single-degree commands don't actually change the physical signal (visible "jumping"/chunkiness).
+- **Workaround used**: skip `set_angle()`/`set_angle_stepping()`/`timing_proc()` entirely. Drive the underlying PWM object directly with the 16-bit `.duty_u16()` call instead — about 64x finer resolution:
+  ```python
+  def angle_to_duty_u16(angle):
+      return int(1638 + angle * 36.3556)
+
+  servo_pwm = servos.servos_map[SERVO_IDX - 1]
+  servo_pwm.duty_u16(angle_to_duty_u16(angle))
+  ```
+  Continuous motion (sweeps, wandering, jitter) is then just your own loop calling this repeatedly with your own step size and delay — simpler and fully predictable.
+- Also: the docstring for `reset_info()` claims a default rotation speed of 4 rad/sec; the actual code default is `8.05` — irrelevant once you're on the `duty_u16()` path above.
 
 ### Buzzer (`/bbl/buzzer.py`)
 
@@ -116,7 +150,7 @@ On my build this mapped to: bit 0 = front holoprojector light, bit 1 = logic-dis
 
 ## Step 4: The multi-zone LED animation engine
 
-Since `LEDController` can't run independent effects per pixel, here's a small standalone engine that drives the raw `NeoPixel` object with per-pixel state — `off`, `solid`, `blink`, `breathe`, and `twinkle` (a randomized color cross-fade, modeled on how real R2-D2 replica "logic displays" behave — they fade between key colors and pause for a random hold at each, rather than blinking on a fixed clock):
+Since `LEDController` can't run independent effects per pixel, here's a small standalone engine that drives the raw `NeoPixel` object with per-pixel state. Pattern types in the shipped `main.py`: `off`, `solid`, `blink`, `breathe` (sine pulse), `twinkle` (a randomized color cross-fade, modeled on how real R2-D2 replica "logic displays" behave — they fade between key colors and pause for a random hold at each, rather than blinking on a fixed clock), and `rainbow` (smooth HSV hue rotation with an optional breathing envelope). The core of it:
 
 ```python
 import sys
@@ -197,6 +231,8 @@ def led_tick():
     np.write()
 ```
 
+*(the `rainbow` pattern and its HSV helper are a bit more code — see `main.py` for the complete, current version)*
+
 A "reaction" is then just a dict mapping pixel index → `(pattern, params)`:
 
 ```python
@@ -204,19 +240,13 @@ FRONT_HOLO, LOGIC_DISPLAY, REAR_CIRCLE, LIGHT_BAR = 0, 1, 2, 3
 BLUE, WHITE, ORANGE, RED = (0,40,90), (255,255,255), (255,110,0), (255,0,0)
 
 LED_REACTIONS = {
-    "standby": {
-        FRONT_HOLO:    ('breathe', {'rgb': BLUE, 'period_ms': 3000}),
-        LOGIC_DISPLAY: ('twinkle', {'colors': [BLUE, WHITE], 'fade_ms': 700, 'hold_ms': 900}),
-        REAR_CIRCLE:   ('off', {}),
-        LIGHT_BAR:     ('off', {}),
-    },
     "alert": {
         FRONT_HOLO:    ('blink', {'rgb': RED, 'period_ms': 200}),
         LOGIC_DISPLAY: ('twinkle', {'colors': [RED, WHITE], 'fade_ms': 100, 'hold_ms': 80}),
         REAR_CIRCLE:   ('blink', {'rgb': RED, 'period_ms': 200}),
         LIGHT_BAR:     ('blink', {'rgb': RED, 'period_ms': 100}),
     },
-    # ...more reactions
+    # ...more reactions — see the "Current reactions" table below and main.py
 }
 ```
 
@@ -247,28 +277,35 @@ def connect_wifi(ssid, password):
 
 **ESP32-C3 is 2.4GHz only.** If your network has separate 2.4/5GHz SSIDs, make sure you're connecting to the 2.4GHz one.
 
-For MQTT, there's no built-in client — vendor [`umqtt.simple`](https://github.com/micropython/micropython-lib/blob/master/micropython/umqtt.simple/umqtt/simple.py) onto the board (save it as `/umqtt/simple.py`).
+For MQTT, there's no built-in client — this repo vendors [`umqtt.simple`](https://github.com/micropython/micropython-lib/blob/master/micropython/umqtt.simple/umqtt/simple.py) at `umqtt/simple.py` (see [Acknowledgments](#acknowledgments)), which you copy to the board at `/umqtt/simple.py` along with everything else.
 
 Two real bugs worth patching around:
 
 ```python
-async def mqtt_task(client):
+async def mqtt_task():
     while True:
-        try:
-            client.check_msg()
-        except OSError as e:
-            # umqtt.simple has a known issue where "no message waiting"
-            # is sometimes reported as OSError(-1) instead of returning
-            # cleanly — swallow specifically that case.
-            if not (e.args and e.args[0] == -1):
-                print("mqtt error:", e)
+        client = conn["client"]  # see "Reconnecting" below for why this
+        if client is not None:   # isn't just a fixed argument
+            try:
+                client.check_msg()
+            except OSError as e:
+                # umqtt.simple has a known issue where "no message waiting"
+                # is sometimes reported as OSError(-1) instead of returning
+                # cleanly — swallow specifically that case. Anything else
+                # is a real link failure, and must NOT be swallowed too —
+                # see "Reconnecting" below for why that matters.
+                if e.args and e.args[0] == -1:
+                    pass
+                else:
+                    print("mqtt error:", e)
+                    link_state["down"] = True
         await uasyncio.sleep_ms(100)
 ```
 
 ```python
-def connect_mqtt(client_id, broker, user, password):
+async def connect_mqtt():
     from umqtt.simple import MQTTClient
-    client = MQTTClient(client_id, broker, port=1883, user=user, password=password)
+    client = MQTTClient(MQTT_CLIENT_ID, MQTT_BROKER, port=1883, user=MQTT_USER, password=MQTT_PASSWORD)
     # umqtt.simple's connect() has NO timeout by default — a bad/unreachable
     # broker can hang FOREVER with zero output. Always pass an explicit one.
     for attempt in range(5):
@@ -277,13 +314,33 @@ def connect_mqtt(client_id, broker, user, password):
             return client
         except Exception as e:
             print("mqtt connect attempt", attempt, "failed:", e)
-            time.sleep(2)
+            await uasyncio.sleep_ms(2000)
     raise RuntimeError("could not connect to MQTT")
 ```
 
+Credentials for both of these come from `config/__init__.py` (see [Project structure](#project-structure)) rather than being hardcoded — `main.py` does `from config import (WIFI_SSID, WIFI_PASSWORD, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, MQTT_CLIENT_ID)`.
+
+The shipped `main.py` also registers a **Last Will and Testament** on connect (`client.set_last_will(...)`) — the broker auto-publishes `r2d2/availability` → `offline` (retained) if the board ever drops off ungracefully (WiFi loss, power loss, crash), paired with a birth message (`online`) once connected. That's what backs the HA availability/heartbeat entities in Step 6.
+
+### Reconnecting
+
+`umqtt.simple` has no reconnect logic of its own, and it's easy to accidentally paper over that: an early version of `mqtt_task` here caught *every* `OSError` from `check_msg()`, not just the harmless `-1` quirk above. Once the underlying socket died — a WiFi blip, a broker restart, anything — it just kept silently calling `check_msg()` on a dead socket forever, never raising, so nothing ever noticed or recovered. In practice this looked like the board falling silent in Home Assistant while everything else (LEDs, servo) kept running fine, since those don't touch MQTT at all.
+
+The fix has two parts. First, `client` is a shared mutable reference (`conn = {"client": ...}`) instead of a fixed argument to each task — a reconnect creates a *new* `MQTTClient`, and every task needs to pick that up on its next loop iteration rather than keep talking to the one it originally started with. Second, a `connection_watchdog` task checks WiFi + a `link_state["down"]` flag (set by any task that hits a real failure) every 15s, and runs a full reconnect — fresh client, re-subscribe, re-publish birth message and discovery — when needed. `connect_wifi()` and `connect_mqtt()` are both `async def` with `await uasyncio.sleep_ms(...)` in their retry loops rather than blocking `time.sleep()`, specifically so a reconnect attempt doesn't freeze the LED/servo animations while it runs — a real risk once reconnecting can happen at any time from a background task, not just once at boot.
+
+One residual limit: the individual connect calls themselves (`wlan.connect()`, `client.connect()`, `ntptime.settime()` below) are still synchronous library calls under the hood, so a reconnect can briefly stall animations for a couple of seconds — far better than the ~60s a fully blocking retry loop would cause, but not zero.
+
+`connection_watchdog`'s status lines (link unhealthy, reconnected, reconnect failed) — along with `connect_wifi()`/`connect_mqtt()`'s own — all publish to `r2d2/log` unconditionally via `log_always()` (see "Real timestamps" below), not gated behind the debug switch, so a reconnect happening is actually visible in Home Assistant. The one unavoidable gap: during the handshake itself there's usually no MQTT client yet to publish through (first boot, and the start of every reconnect), so those specific lines land console-only in practice — the "reconnected" confirmation line is the one guaranteed to make it through, since a working client exists by the time it fires.
+
+### Real timestamps
+
+ESP32-C3 has no battery-backed RTC, so `time.ticks_ms()` — used for all the animation timing elsewhere in this project — just counts milliseconds since the last power-on and resets to 0 every boot. That's fine for animation math, but useless for knowing *when* something happened, which matters once you're pulling logs or heartbeat values off the device later. `main.py` calls `ntptime.settime()` once WiFi connects, and a small `timestamp()` helper returns a real date once that's synced (falling back to `boot+<ms>` before that, or forever on a MicroPython build without `ntptime` — guarded with a try/except at import). `dbg()` and the heartbeat payload both use it.
+
+`ntptime.settime()` makes exactly one attempt with no retry, and `pool.ntp.org` round-robins across many volunteer servers of inconsistent reachability — a single `ETIMEDOUT` doesn't mean NTP is actually blocked. `sync_time()` retries 3x, and `connection_watchdog` (see "Reconnecting" above) keeps retrying it independently every 15s until it succeeds. Its retry/success/failure messages publish to `r2d2/log` unconditionally via a `log_always()` helper, not gated behind the debug switch — `dbg()` is just a thin wrapper adding that gate back for everything else — same reasoning as the heartbeat topic itself being independent of the debug flag: connectivity/time-sync lifecycle events are worth seeing in HA without remembering to flip debug on first.
+
 ## Step 6: Home Assistant MQTT Discovery
 
-Rather than hand-configuring entities in `configuration.yaml`, the board can announce itself to Home Assistant automatically via [MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery) — publish a small JSON payload to a well-known topic, and HA creates the entity on the spot.
+Rather than hand-configuring entities in `configuration.yaml`, the board announces itself to Home Assistant automatically via [MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery) — publish a small JSON payload to a well-known topic, and HA creates the entity on the spot. The shipped firmware publishes three entities this way: a mode **select** (the reaction dropdown), a debug-logging **switch**, and a heartbeat **sensor**.
 
 ```python
 import ujson
@@ -294,36 +351,47 @@ def publish_discovery(client, modes):
         "name": "R2D2 Astromech",
         "manufacturer": "CyberBrick (custom firmware)",
     }
-    payload = {
+    mode_payload = {
         "name": "R2D2 Mode",
         "unique_id": "r2d2_mode_select",
-        "options": list(modes),
+        "options": sorted(modes),
         "state_topic": "r2d2/mode/state",
         "command_topic": "r2d2/command",
         "command_template": '{"mode": "{{ value }}"}',
+        "availability_topic": "r2d2/availability",
         "device": device_info,
     }
     client.publish(b"homeassistant/select/r2d2/mode/config",
-                    ujson.dumps(payload).encode(), retain=True)
+                    ujson.dumps(mode_payload).encode(), retain=True)
 ```
 
-This gets you a dropdown entity in Home Assistant with your reaction names as options, with zero manual YAML. Discovery payloads are retained on the broker, so the entity persists across HA restarts even if the board is offline.
+*(the debug switch and heartbeat sensor discovery payloads follow the same shape — see `publish_discovery()` in `main.py` for the complete version)*
 
-A nice bonus: since debug logging goes over MQTT too (`client.publish(b'r2d2/log', line)`), you can watch live debug output from anywhere via HA's MQTT integration → **Listen to a topic** → `r2d2/log`, no serial cable required once it's deployed.
+This gets you a dropdown entity in Home Assistant with your reaction names as options, plus the switch/sensor, with zero manual YAML. Discovery payloads are retained on the broker, so the entities persist across HA restarts even if the board is offline.
+
+A nice bonus: since debug logging goes over MQTT too (`client.publish(b'r2d2/log', line)`, gated by the debug switch), you can watch live debug output from anywhere via HA's MQTT integration → **Listen to a topic** → `r2d2/log`, no serial cable required once it's deployed. The heartbeat sensor (`r2d2/heartbeat`, published every 60s, `expire_after: 180`) gives HA automatic staleness detection independent of debug logging.
 
 ## Step 7: Tie it together
 
-The full reaction dispatch loop:
+The full reaction dispatch loop, split across two files — `boot.py` (trivial, runs on every power-on) and `main.py` (everything else):
 
 ```python
-state = {"mode": "standby"}
+# boot.py
+import main
+```
+
+```python
+# main.py (abridged — see the file itself for the complete version)
+state = {"mode": "standby", "debug": False}
+conn = {"client": None}
 _applied_led_mode = None
 
 async def led_task():
     global _applied_led_mode
     while True:
+        cfg = LED_REACTIONS.get(state["mode"], LED_REACTIONS[DEFAULT_MODE])
         if state["mode"] != _applied_led_mode:
-            apply_led_reaction(LED_REACTIONS[state["mode"]])
+            apply_led_reaction(cfg)
             _applied_led_mode = state["mode"]
         led_tick()
         await uasyncio.sleep_ms(20)
@@ -334,18 +402,49 @@ def on_mqtt_message(topic, msg):
     if mode in LED_REACTIONS:
         state["mode"] = mode
 
-async def main():
-    connect_wifi(WIFI_SSID, WIFI_PASSWORD)
-    client = connect_mqtt(MQTT_CLIENT_ID, MQTT_BROKER, MQTT_USER, MQTT_PASSWORD)
+async def establish_link():
+    # shared by boot and connection_watchdog's reconnect path
+    await connect_wifi()
+    client = await connect_mqtt()
     client.set_callback(on_mqtt_message)
     client.subscribe(b'r2d2/command')
+    conn["client"] = client
     publish_discovery(client, LED_REACTIONS.keys())
-    await uasyncio.gather(led_task(), servo_task(), mqtt_task(client))
+    return client
+
+async def main():
+    await establish_link()
+    await uasyncio.gather(
+        supervise("led_task", led_task),
+        supervise("servo_task", servo_task),
+        supervise("mqtt_task", mqtt_task),
+        supervise("state_publish_task", state_publish_task),
+        supervise("heartbeat_task", heartbeat_task),
+        supervise("connection_watchdog", connection_watchdog),
+    )
 
 uasyncio.run(main())
 ```
 
-Save this as `/boot.py` on the board (via the Files panel, not paste), and it runs standalone on every power-on — no computer required.
+The real `main.py` wraps each task in a `supervise()` helper — without it, `uasyncio.gather()` aborts *every* sibling task the moment any single one raises an unhandled exception, so a bug in (say) `led_task` would silently kill `heartbeat_task` too. `supervise()` catches per-task and restarts just that task, isolating failures. `connection_watchdog` is the odd one out — see "Reconnecting" in Step 5 for what it does and why the `client` reference is a shared dict rather than a fixed argument.
+
+Copy `boot.py`, `main.py`, `config/__init__.py` (created per [Project structure](#project-structure)), and `umqtt/simple.py` onto the board's root filesystem via Arduino Lab's Files panel (not paste), and it runs standalone on every power-on — no computer required.
+
+## Current reactions
+
+| Mode | Lights | Servo |
+|---|---|---|
+| `standby` | Synced cycle: dim/off → bright → dim, every ~3-5 min | Synced with lights — glides to a new spot during the "active" phase |
+| `awake` | Rainbow front holo + twinkle logic display | Continuous slow "wander" — random glide + pause every 2-5 min |
+| `excited` | Fast orange blink everywhere | Fast sweep, full 1-179° range |
+| `surveillance` | Solid white front + twinkling logic display + breathing rear | Slow sweep |
+| `alert` | All-red blink/twinkle | Fast sweep |
+| `sleep` | Everything off except very slow/dim logic-display twinkle | Centered/still |
+| `system_crash` | Chaotic multi-color twinkle/strobe | Snap to 145° then tight jitter |
+| `system_crash_extreme` | Same lights as `system_crash` | Wide random walk instead of jitter |
+| `hologram` | All 4 zones blink red in sync (700ms) — "on a call" indicator | Centered/still |
+
+`standby` is the one mode where lights and servo are driven by a single shared state machine (idle → active → suspending) instead of running independently — see `PROJECT_NOTES.md` for the full rationale.
 
 ## Gotchas that cost the most debugging time
 
@@ -359,9 +458,15 @@ Worth calling these out explicitly since they were the least obvious:
 
 ## Where this could go next
 
-- A physical piezo buzzer on the free buzzer output, using the RTTTL player for short "droid chirp" sounds on mode changes
-- One-shot animations (a "greeting" sequence) separate from persistent modes
-- More reactions now that the dispatch pattern is proven — this scales to as many as you want
+- **Sound**: a DFPlayer Mini (UART-controlled MP3 player, real files off microSD, indexed via `play(track_id)`) for real movie-accurate R2-D2 sound clips, on a separate `r2d2/sound` MQTT topic + a second HA select entity so it doesn't disturb the active LED/servo mode. Still waiting on hardware + sound files (movie-accurate clips should come from the astromech.net / R2 Builders Club community, not generated).
+- Physical dome mechanical centering — not yet calibrated; the dome isn't perfectly centered at software's 90°.
+- A piezo buzzer on the free buzzer output (`BUZZER1`, GPIO21), using the `/bbl/buzzer.py` RTTTL player for short "droid chirp" sounds on mode changes.
+- One-shot animations (a "greeting" sequence) separate from the persistent modes.
+
+## Acknowledgments
+
+- [`umqtt.simple`](https://github.com/micropython/micropython-lib/blob/master/micropython/umqtt.simple/umqtt/simple.py) from [micropython-lib](https://github.com/micropython/micropython-lib) (MIT licensed) — vendored unmodified in this repo at `umqtt/simple.py`, since MicroPython has no MQTT client built in.
+- CyberBrick's own `/bbl` hardware driver library (`leds.py`, `servos.py`) — not vendored here (it ships with the board), but this project calls into it directly. See [CyberBrick_Controller_Core](https://github.com/CyberBrick-Official/CyberBrick_Controller_Core).
 
 ---
 
