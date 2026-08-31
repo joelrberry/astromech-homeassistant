@@ -141,8 +141,10 @@ All of the above are present in the schematic netlist.
 | 33         | `BTN_MODE_DN` | J_BTN pin 3 → button → GND           | " |
 | 25         | `BTN_SOUND`   | J_BTN pin 4 → button → GND           | " — tap = sound; Mode▲+Sound 5 s = WiFi setup |
 | 27         | `BUZZER`      | → piezo → GND (J_BUZZER)             | `machine.PWM` UI feedback. Bare piezo disc + ~100 Ω series R for a quiet beep; option: 2N7002 low‑side + piezo from +5 V for louder |
+| 21         | `I2C_SDA`    | J_OLED pin 3 → SSD1306 SDA           | ESP32 default I2C SDA. Firmware auto‑detects the OLED (`i2c.scan()`); absent = no display task |
+| 22         | `I2C_SCL`    | J_OLED pin 4 → SSD1306 SCL           | ESP32 default I2C SCL |
 | VIN        | `+5V`          | shared rail                          | devkit's onboard LDO feeds its own logic |
-| 3V3        | —              | not connected                        | R4 pull‑up removed 2026‑08‑29 (redundant with the firmware internal PU); devkit 3V3 pin left as no‑connect |
+| 3V3        | `+3V3`         | J_OLED pin 1 (SSD1306 VCC)           | now used — the devkit's onboard regulator (AMS1117, fed from +5V) powers the ~20 mA OLED. R4 pull‑up still removed (redundant with the firmware internal PU). If no OLED is fitted, 3V3 is simply unloaded. |
 | GND        | `GND`          | —                                    | |
 
 Unused 74AHCT125 inputs (A2..A4) tied to GND; unused `/OE2../OE4` tied to GND;
@@ -180,6 +182,7 @@ servo + NeoPixel + DFPlayer branch; wide fill everywhere else.
 | J_SPK   | JST‑PH 2.0 mm 2‑pin                    | SPK+ / SPK−             | 4–8 Ω speaker, DFPlayer pins 6 & 8 — differential, do **not** ground |
 | J_BTN   | 1×4 header, 2.54 mm                    | GND / IO32 / IO33 / IO25 | front‑panel buttons: mode ▲ (IO32), mode ▼ (IO33), sound (IO25). Each wires between its signal pin and GND; firmware internal pull‑up, **no external resistors**. Tap = cycle / hold = volume; Mode ▲ + Sound 5 s = WiFi setup. |
 | J_BUZZER | 1×2 header, 2.54 mm (or onboard piezo pads) | IO27 / GND         | piezo buzzer for UI feedback. Direct off IO27 through ~100 Ω for a quiet beep; footprint should also allow a 2N7002 low‑side driver + piezo from +5 V. Skipped in firmware when `buzzer_enabled` is false. |
+| J_OLED  | 1×4 header, 2.54 mm                    | 3V3 / GND / IO21 / IO22 | SSD1306 128×64 I2C status display (addr 0x3C). ~20 mA off **3V3**, not +5V. Firmware auto‑detects — no display = no cost. Pin order matches the common 4‑pin SSD1306 module (GND/VCC/SCL/SDA varies by module — confirm silk before crimping). Add 4.7 kΩ SDA/SCL pull‑ups to 3V3 on the board (most modules already have them → ~2.3 kΩ effective, still fine; keeps a bare panel working). |
 
 ## DFPlayer Mini pinout reference (16‑pin, for J_DFP wiring)
 
