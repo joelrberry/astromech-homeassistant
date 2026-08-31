@@ -1,7 +1,16 @@
-# On-device firmware update. Pulls app/ + lib/ from GitHub via `mip`, keeping a
+# On-device firmware update. Pulls app/ + lib/ (per package.json), keeping a
 # backup so root /main.py can roll back if the new build won't boot cleanly.
 # boot.py and root main.py are NOT updated here (USB-flash only) so the
 # bootstrap + rollback code is always known-good.
+#
+# Two sources:
+#   * core.cfg["ota_url"] set  -> plain HTTP from that mirror, file by file
+#     (staged .ota -> rename). No TLS. REQUIRED on a classic ESP32: mbedTLS
+#     needs ~16 KB contiguous blocks it can't get once the app is running,
+#     even with ~65 KB free, so GitHub-direct HTTPS reliably fails ENOMEM.
+#     Run any static server on an always-on box:  python3 -m http.server 8000
+#     in the repo root, then  ota_url = "http://<box>:8000/droidrefit"
+#   * no ota_url  -> `mip` from GitHub (works on S2/S3/roomy builds only).
 #
 # Triggers: HA Update entity, web-panel button, MQTT, boot auto-check (net.py
 # and app/main.py wire those in).
@@ -73,10 +82,13 @@ async def check():
         txt = r.text
         r.close()
     except Exception as e:
+        msg = "check: %s" % e
+        if "ENOMEM" in str(e) and not core.cfg.get("ota_url"):
+            msg = "check: ENOMEM (classic ESP32 can't TLS to GitHub — set ota_url to an HTTP mirror)"
         state["status"] = "error"
-        state["msg"] = "check: %s" % e
+        state["msg"] = msg
         _touch()
-        core.log_always("[ota] check failed:", e)
+        core.log_always("[ota]", msg)
         return
     latest = None
     for line in txt.split("\n"):
@@ -135,6 +147,45 @@ def _rmtree(path):
         pass
 
 
+def _sweep_staged(paths):
+    for p in paths:
+        try:
+            os.remove("/" + p + ".ota")
+        except OSError:
+            pass
+
+
+def _http_pull(base, paths):
+    # Download every managed file to "<path>.ota", then rename into place once
+    # they've all arrived — a mid-download failure leaves the running build
+    # untouched. Plain HTTP: no handshake buffer, heap fragmentation is a
+    # non-issue.
+    _sweep_staged(paths)
+    staged = []
+    for p in paths:
+        _prep_mem("get " + p)
+        r = requests.get(base + "/" + p, timeout=15)
+        try:
+            if r.status_code != 200:
+                raise OSError("%s -> HTTP %s" % (p, r.status_code))
+            body = r.content
+        finally:
+            r.close()
+        _mkparents("/" + p)
+        with open("/" + p + ".ota", "wb") as f:
+            f.write(body)
+        body = None
+        staged.append(p)
+        gc.collect()
+    for p in staged:
+        try:
+            os.remove("/" + p)
+        except OSError:
+            pass
+        os.rename("/" + p + ".ota", "/" + p)
+    core.log_always("[ota] %d files pulled from %s" % (len(staged), base))
+
+
 async def update():
     if state["status"] == "updating":
         return
@@ -165,15 +216,20 @@ async def update():
         _touch()
         return
 
-    _prep_mem("install")
+    mirror = core.cfg.get("ota_url")
     try:
-        import mip
-        mip.install(_mip_spec(), target="/", version=_BRANCH, mpy=False)
+        if mirror:
+            _http_pull(mirror, paths)
+        else:
+            _prep_mem("install")
+            import mip
+            mip.install(_mip_spec(), target="/", version=_BRANCH, mpy=False)
     except Exception as e:
         state["status"] = "error"
         state["msg"] = "download: %s" % e
         _touch()
         core.log_always("[ota] download failed:", e)
+        _sweep_staged(paths)
         return
 
     with open(FLAG, "w") as f:

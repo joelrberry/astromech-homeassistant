@@ -36,6 +36,8 @@ _DEFAULTS = {
     "mqtt_pass": "",
     "topic_prefix": "",
     "web_pin": "",
+    "ota_url": "",   # HTTP mirror base for OTA, e.g. http://192.168.1.50:8000/droidrefit
+                     # (empty -> pull from GitHub via mip; required on classic ESP32)
     "configured": False,
 }
 
