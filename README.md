@@ -43,6 +43,11 @@ over a flaky USB link; a failed run leaves the board at a safe REPL, and
 re-running converges. `--stay` leaves it in safe mode; `--format` reformats
 the flash (last resort).
 
+> **After flashing, hard power-cycle the board** (pull power / press EN — not
+> just a soft reset). `deploy.py` ends with a soft reset, but hardware timers,
+> the UART, PWM, and singleton driver objects survive that; only a cold boot
+> gives the clean state the firmware actually runs in.
+
 First boot with no config, the board hosts a WiFi AP **`R2-D2-XXXX`** — join it
 from a phone, the setup page opens, enter WiFi + a droid name (tick "Connect to
 Home Assistant" for the MQTT broker fields), save. It reboots onto your network:

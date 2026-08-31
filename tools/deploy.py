@@ -206,7 +206,8 @@ def main():
     print("removing noboot.txt + reboot")
     _mpremote(p, "fs", "rm", ":noboot.txt", retries=3)
     _mpremote(p, "soft-reset", check=False)
-    print("\ndone — board rebooting into the app.")
+    print("\ndone — now HARD power-cycle the board (pull power / press EN).")
+    print("a soft reset leaves timers, UART, PWM and driver singletons stale.")
 
 
 if __name__ == "__main__":
