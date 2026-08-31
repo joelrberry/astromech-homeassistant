@@ -97,5 +97,22 @@ if not _skip:
         print("[boot] interrupted — staying at the REPL")
 
 if not _skip:
-    from app.main import run
-    run()
+    try:
+        from app.main import run
+        run()
+    except KeyboardInterrupt:
+        raise
+    except Exception as _e:
+        sys.print_exception(_e)
+        # If an OTA trial is in flight (/ota.flag present), a crash here has to
+        # become a reset so the boot counter in /main.py's rollback block can
+        # climb to the rollback threshold. Without a normal OTA in progress a
+        # crash is just a bug — stay at the REPL so it's debuggable over USB.
+        try:
+            os.stat("/ota.flag")
+        except OSError:
+            raise
+        print("[ota] new build crashed on boot — resetting to advance rollback")
+        import machine
+        time.sleep(3)
+        machine.reset()
