@@ -2,9 +2,11 @@
 
 MicroPython for a plain **ESP32** (stock `ESP32_GENERIC`, tested on v1.29)
 driving an astromech droid: one dome servo, a DFPlayer Mini for sound, and a
-4-pixel WS2812 dome-light string. Controlled from Home Assistant over MQTT
-**and** from a built-in local web page — both, or either. First-run WiFi/MQTT
-setup is a captive portal; updates are over-the-air from this repo.
+4-pixel WS2812 dome-light string. **Offline-first** — it boots and runs
+standalone, controlled by three front-panel buttons (mode ▲ / mode ▼ / sound).
+WiFi + Home Assistant (MQTT) are an optional layer, **off by default**; hold the
+Sound button ~5 s to bring up a WiFi setup portal. Updates are over USB
+(`tools/deploy.py`).
 
 Replaces the retired CyberBrick core board (see
 [cyberbrick-origins.md](cyberbrick-origins.md) and
@@ -20,8 +22,9 @@ is an external 5 V rail everything hangs off directly; the
 | Dome servo PWM | `GPIO18` | 50 Hz, `machine.PWM` |
 | DFPlayer UART2 TX / RX | `GPIO17` / `GPIO16` | 9600 baud |
 | DFPlayer BUSY | `GPIO4` | active-low, playback-finished detect |
-| NeoPixel data | `GPIO5` | 4 pixels; via a `74AHCT1G125` 3.3→5 V shifter on the PCB (often fine direct on a short bench run) |
-| Factory-reset / safe-mode | `GPIO0` | the devkit BOOT button, read while running |
+| NeoPixel data | `GPIO5` | 4 pixels; via a `74AHCT1G125` 3.3→5 V shifter on the PCB (often fine direct on a short bench run). Skipped entirely when `leds_enabled` is false |
+| Button: mode ▲ / mode ▼ / sound | `GPIO32` / `GPIO33` / `GPIO25` | each pin↔GND, internal pull-up, active-low. PCB header `J_BTN` |
+| Factory-reset | `GPIO0` | the devkit BOOT button, held ~10 s while running |
 
 Power: **5 V, 3 A+** into the rail. Servo, DFPlayer and pixels wire straight to
 it; the ESP32 taps it at `VIN`. Realistic combined peak ~2 A (servo stall
@@ -51,14 +54,16 @@ never writes `/config.json`.
   `/config.json`). Use only if verified copies keep failing on the *same*
   file, which points at a corrupt filesystem rather than a flaky cable.
 
-**First boot with no config** → the board hosts an open-ended WiFi AP
-`R2-D2-XXXX` (WPA2, sticker password). Join it from any phone; the setup page
-auto-opens. Enter WiFi + a droid name, tick "Connect to Home Assistant" for
-the MQTT fields, save. It reboots onto your network.
+**Bringing up WiFi / Home Assistant** — hold the Sound button ~5 s (or do a
+factory reset). The board reboots into a WiFi AP `R2-D2-XXXX` (WPA2, sticker
+password); join it from a phone, the setup page auto-opens, enter WiFi + a
+droid name, tick "Connect to Home Assistant" for the MQTT fields, save. It
+reboots with `network_enabled = true` and connects. Until then it runs fully
+offline on the buttons.
 
 For bench work, skip the portal: create `app/config_baked.py` (gitignored,
-copy `config_baked.py.example`) with your WiFi/MQTT and it's used whenever
-there's no `/config.json`.
+copy `config_baked.py.example`) with your WiFi/MQTT — set `network_enabled: true`
+in it to auto-connect.
 
 ## Architecture
 
@@ -70,9 +75,9 @@ there's no `/config.json`.
 hw, core, config, version   leaves
 sound  -> core, hw           servo -> core, sound, hw     leds -> core, hw
 diag   -> core               ota   -> core, version
-net    -> core, sound, servo, diag, ota
-webui  -> core, net, servo, sound, diag, ota
-provisioning -> config, core         main -> everything
+control -> core, sound, servo         buttons -> core, hw, control
+net    -> core, sound, servo, diag, ota, control
+provisioning -> config, core          main -> everything
 ```
 
 Shared state lives in `core` (`state`, `servo_state`, `conn`, `link_state`,
@@ -81,9 +86,11 @@ time — never `from app.core import cfg` (it's `None` until `core.init()`).
 Every long-lived task runs under `core.supervise()`, which restarts just that
 task on a crash and counts restarts (surfaced in diagnostics).
 
-`app/main.py` `main()`: connect (WiFi + MQTT, or WiFi only if MQTT is off) →
-`ota.confirm()` → gather the task set. MQTT tasks only run when
-`cfg["mqtt_enabled"]`.
+`app/main.py` `main()`: if `/portal.flag` exists → run the setup portal (blocks,
+reboots on save). Else `core.init(cfg)`, import modules, and — only when
+`cfg["network_enabled"]` — connect WiFi (+ MQTT if `mqtt_enabled`). Then
+`ota.confirm()` and gather the task set: `servo`, `led`, `busy_monitor`,
+`button`, `reset_button`, `log` always; the MQTT tasks only when networked.
 
 ### Recovery hatches (root `/main.py`, self-contained — no `app` import)
 
@@ -92,19 +99,35 @@ task on a crash and counts restarts (surfaced in diagnostics).
 | Safe mode | `noboot.txt` present at FS root | print a banner, don't start the app → clean REPL (`tools/deploy.py` uses this) |
 | Ctrl-C | any time the app / asyncio loop is running | drops to the REPL (not a boot-time countdown — that was removed as a stray byte on the serial line could trip it) |
 | OTA rollback | `/ota.flag` present and boot count > 2 | restore `/bak` (pre-update files), reboot the old build |
-| Factory reset | hold `GPIO0` ~10 s while running | scream, wipe `/config.json`, reboot to the portal |
-| Connect-fail fallback | (planned) WiFi never associates for ~5 min | reboot to the portal |
+| Setup portal | hold the Sound button ~5 s | write `/portal.flag`, reboot → AP + config portal |
+| Factory reset | hold `GPIO0` ~10 s while running | scream, wipe `/config.json`, write `/portal.flag`, reboot → portal |
 
 ## Config store — `app/config.py`
 
 `/config.json` at the FS root is the live config, written by the portal.
-`load()` returns a normalised dict or `None` (unconfigured); `save()` is
-atomic; `wipe()` clears it. `topic_prefix` (a slug of the droid name, or
-`r2d2`) is the single per-droid identity — MQTT client id, the whole topic
-tree, every HA `unique_id`, the HA device id. Set it to `r2d2` on a returning
-single unit to keep existing entities.
+`load()` **always** returns a normalised dict — no file just means offline
+defaults (`network_enabled = false`); `save()` is atomic; `wipe()` clears it.
+Key flags: `network_enabled` (gate on all WiFi/MQTT), `mqtt_enabled`,
+`leds_enabled` (skip the NeoPixel/RMT path). `topic_prefix` (a slug of the
+droid name, or `r2d2`) is the single per-droid identity — MQTT client id, the
+whole topic tree, every HA `unique_id`, the HA device id.
 
-## Control — Home Assistant
+## Control — buttons (`app/buttons.py` → `app/control.py`)
+
+Three buttons on `GPIO32/33/25`, pin↔GND, internal pull-up, active-low —
+`button_task` polls at 50 ms:
+
+- **mode ▲ / mode ▼** — step `core.state["mode"]` through `control.MODE_CYCLE`
+  (the 7 resting modes; `system_crash` is HA-only), wrapping. Auto-repeats
+  every 400 ms while held.
+- **sound** — tap (<0.8 s) fires a random sound category; **hold ~5 s** writes
+  `/portal.flag` and reboots into the WiFi setup portal.
+
+`control.apply_mode / apply_sound / apply_volume / cycle_mode` are the single
+code path — buttons, MQTT, and the portal all call them. The dome NeoPixels
+already encode the current mode (`leds.LED_REACTIONS`), so that's the feedback.
+
+## Control — Home Assistant *(only when `network_enabled`)*
 
 MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 
@@ -116,23 +139,17 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Debug logging (switch) | `<prefix>/debug/set` | `<prefix>/debug/state` |
 | Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
-| Diagnostics (13 sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
+| Diagnostics (sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
 
 `<prefix>/log` carries `log_always()` output (queued and drained one line per
 ~20 ms so bursts don't truncate on the socket). Availability is re-asserted
 every heartbeat so a stray LWT `offline` self-heals.
 
-`net.apply_mode/apply_sound/apply_volume` are the single code path — MQTT, the
-web panel, and any future button all call them.
+MQTT commands land via `control.apply_*` — same path as the buttons.
 
-## Control — local web panel (`app/webui.py`)
-
-Async HTTP on port 80, always up (with or without MQTT). Reach it at the IP
-logged on boot, or `http://<hostname>.local/` (best-effort mDNS via
-`network.hostname()`). Mode + sound buttons (sound button lights while
-playing), volume slider, live-polled state, and a **Diagnostics** readout. A
-**Firmware** section (installed → latest, Update button) appears only when
-`ota_url` is set. Optional `web_pin` gates the state-changing POSTs.
+There is **no always-on web control panel** — it was removed (its accept loop
+wedged after WiFi blips and leaked sockets). The only web surface is the
+first-run setup portal (`app/provisioning.py`), reached on demand.
 
 ## Servo — `app/servo.py`
 
@@ -164,20 +181,15 @@ tracks), so the UI can un-light the button.
 
 ## Diagnostics — `app/diag.py`
 
-`snapshot()` → reset cause, uptime, free heap (%), free/total flash, CPU MHz,
-RSSI, IP, WiFi SSID + channel, MCU temp, time-synced, task-restart count,
-reconnect count, WiFi-association count (`wifi_assoc` — climbs on every
-re-association; a flapping-link tell). Published to `<prefix>/diag` every 30 s
-(HA diagnostic sensors) and served at `GET /diag`. Reset cause is a one-shot
-retained publish — note that on a **classic ESP32 a brownout reports as
-power-on**, so a brownout and a real power-cycle look identical here; the
-serial console (`Brownout detector was triggered`) is the only tell, see
-`tools/serial-log.py`.
-
-Every WiFi re-association bumps `core.net_generation`; `webui.web_server_task`
-watches it and rebuilds its listening socket, because a WiFi drop can leave
-`asyncio.start_server`'s accept loop wedged (stops accepting, never raises, so
-`supervise` can't restart it).
+`snapshot()` → reset cause, uptime, free heap (%), **ESP-IDF internal-RAM free +
+low-water** (`idf_free` / `idf_min_free` — a separate pool from the MicroPython
+heap; sockets, RMT channels and WiFi buffers come from here), free/total flash,
+CPU MHz, RSSI, IP, WiFi SSID + channel, MCU temp, time-synced, task-restart
+count, reconnect count, WiFi-association count (`wifi_assoc`). Published to
+`<prefix>/diag` every 30 s. Reset cause is a one-shot retained publish — on a
+**classic ESP32 a brownout reports as power-on**, so a brownout and a real
+power-cycle look identical here; the serial console (`Brownout detector was
+triggered`) is the only tell, see `tools/serial-log.py`.
 
 ## Updating
 
@@ -186,10 +198,9 @@ board* above). That's the whole update story for most builds.
 
 ### On-device OTA — `app/ota.py`, opt-in
 
-Off unless `core.cfg["ota_url"]` is set (`config.save({"ota_url": "..."})` from
-the REPL). `ota.enabled()` gates the HA Update entity, the web-panel Firmware
-section, the `<prefix>/ota/set` subscription, and the boot auto-check — with no
-`ota_url` none of that is published, so there's no dead button.
+Off unless `core.cfg["ota_url"]` (or `ota_enabled`) is set. `ota.enabled()`
+gates the HA Update entity, the `<prefix>/ota/set` subscription, and the boot
+auto-check — and OTA needs `network_enabled` anyway.
 
 **Why opt-in:** a classic ESP32 can't complete a TLS handshake to GitHub while
 the app is running. mbedTLS needs ~16 KB *contiguous* and MicroPython's GC

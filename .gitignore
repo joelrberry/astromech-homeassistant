@@ -23,3 +23,6 @@ __pycache__/
 # device config pulled off a board — real credentials
 config.json.devicebackup
 *.devicebackup
+
+# serial-log.py captures (runtime artifacts)
+serial-*.log

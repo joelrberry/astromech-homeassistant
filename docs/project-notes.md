@@ -11,6 +11,15 @@
 
 Continuation notes for picking this project up in a new environment (VSCode / Claude Code). This captures the full history: architecture decisions, bugs found and fixed, and current state, so a fresh session has complete context without needing the original chat.
 
+> **2026-08-31 pivot — offline-first.** The droid now boots and runs standalone
+> on three front-panel buttons (mode ▲ / mode ▼ / sound); WiFi + Home Assistant
+> are an optional layer, off by default (`network_enabled`), reached by holding
+> the Sound button ~5 s. The always-on web control panel (`app/webui.py`) was
+> **removed** — its `asyncio.start_server` accept loop wedged after WiFi blips
+> and leaked sockets from the ESP-IDF internal-RAM pool (`rmt: no mem` flood +
+> dead web page). `firmware.md` is authoritative; the MQTT/HA scaffolding
+> described below is unchanged and still used when networking is on.
+
 ## Goal
 
 Control a CyberBrick-based R2-D2 astromech (stationary display piece) from Home Assistant via MQTT. No physical RC transmitter involved — Home Assistant is the sole controller. Multiple named "reactions" (light + servo behaviors) selectable from an HA dropdown, auto-discovered via MQTT Discovery.

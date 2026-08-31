@@ -1,7 +1,7 @@
 # Device telemetry — free heap, filesystem, uptime, reset cause, WiFi RSSI,
 # CPU freq, MCU temp. snapshot() returns a plain dict; net publishes it to
-# <prefix>/diag as JSON for Home Assistant diagnostic sensors, and webui serves
-# it at /diag. Leaf-ish: imports core + stdlib/hw only.
+# <prefix>/diag as JSON for Home Assistant diagnostic sensors. Leaf-ish:
+# imports core + stdlib/hw only.
 #
 # deps: app.core
 
@@ -75,6 +75,21 @@ def snapshot():
     d["task_restarts"] = sum(core.task_restarts.values())
     d["reconnects"] = core.reconnects
     d["wifi_assoc"] = core.net_generation   # WiFi (re)association count — flapping tell
+
+    # ESP-IDF internal RAM — a SEPARATE pool from the MicroPython GC heap above.
+    # Sockets/lwIP PCBs, RMT channels and WiFi buffers come from here; a leak
+    # here (not visible in heap_free) starves neopixel.write() and new sockets.
+    if esp32 is not None:
+        try:
+            tot = fr = mn = 0
+            for region in esp32.idf_heap_info(esp32.HEAP_DATA):
+                tot += region[0]
+                fr += region[1]
+                mn += region[3]
+            d["idf_free"] = fr
+            d["idf_min_free"] = mn        # low-water mark since boot
+        except Exception:
+            pass
     if network is not None:
         try:
             w = network.WLAN(network.STA_IF)

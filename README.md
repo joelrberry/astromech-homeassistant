@@ -1,9 +1,10 @@
-# droidrefit — a Home-Assistant astromech droid
+# droidrefit — an offline-first astromech droid
 
-Custom MicroPython firmware that turns a stationary R2-D2 display build into a
-Home Assistant device: pick a "reaction" from a dashboard (or a phone browser,
-or an MQTT message) and the dome servo, sound, and dome lights all respond.
-No RC transmitter — Home Assistant, a local web page, or both.
+Custom MicroPython firmware for a stationary R2-D2 display build. It runs
+**standalone** — three front-panel buttons (mode ▲ / mode ▼ / sound) drive the
+dome servo, sound, and dome lights. WiFi + **Home Assistant** (pick a reaction
+from a dashboard) are an optional layer, off by default; hold the Sound button
+~5 s to set up WiFi. No RC transmitter.
 
 > **Repo name is historical.** This started as a firmware swap on a *CyberBrick*
 > ESP32-C3 core board. That board browned out under servo + NeoPixels + WiFi,
@@ -26,8 +27,9 @@ No RC transmitter — Home Assistant, a local web page, or both.
 
 Plain ESP32 devkit · one dome servo (GPIO18) · DFPlayer Mini + speaker
 (GPIO16/17, BUSY GPIO4) · 4× WS2812 dome lights (GPIO5, via a `74AHCT1G125`
-level shifter) · a shared **5 V, 3 A+** rail everything hangs off directly.
-The [carrier PCB](hardware/droidrefit-pcb/DESIGN.md) (100×70 mm, USB-C in,
+level shifter) · 3 buttons (GPIO32/33/25, pin↔GND) · a shared **5 V, 3 A+**
+rail everything hangs off directly. The
+[carrier PCB](hardware/droidrefit-pcb/DESIGN.md) (100×70 mm, USB-C in,
 JLCPCB-assembled) makes that permanent; a breadboard works for bench work if
 you power the ESP32 over its own USB.
 
@@ -48,26 +50,25 @@ the flash (last resort).
 > the UART, PWM, and singleton driver objects survive that; only a cold boot
 > gives the clean state the firmware actually runs in.
 
-First boot with no config, the board hosts a WiFi AP **`R2-D2-XXXX`** — join it
-from a phone, the setup page opens, enter WiFi + a droid name (tick "Connect to
-Home Assistant" for the MQTT broker fields), save. It reboots onto your network:
+It boots straight into the app, **offline**. Use the buttons: mode ▲ / mode ▼
+cycle the 7 reactions, Sound fires a clip.
 
-- **Home Assistant** auto-discovers it over MQTT — a Mode select, Sound select,
-  Volume, plus diagnostic sensors.
-- **Web panel** at `http://<hostname>.local/` (or the IP printed on the serial
-  console) — same controls, works with or without Home Assistant.
+**To add Home Assistant:** hold the Sound button ~5 s → the board reboots into
+a WiFi AP **`R2-D2-XXXX`**. Join it from a phone, the setup page opens, enter
+WiFi + a droid name (tick "Connect to Home Assistant" for the MQTT broker
+fields), save. It reboots onto your network and HA auto-discovers it over MQTT
+(Mode / Sound / Volume + diagnostic sensors). There is no always-on web panel.
 
 **Updates go over USB** — after an edit, `python3 tools/deploy.py`. On-device
-OTA exists but is opt-in and off by default: a classic ESP32 can't do TLS to
-GitHub while the app runs (heap fragmentation — mbedTLS can't get a contiguous
-block), so OTA only works against a plain-HTTP mirror on your LAN. Set
-`ota_url` in the droid's config to enable it; then an HA Update entity and a
-web-panel Firmware section appear. Detail in [docs/firmware.md](docs/firmware.md).
+OTA exists but is opt-in, needs `network_enabled`, and — on a classic ESP32 —
+a plain-HTTP LAN mirror (`ota_url`), because it can't TLS to GitHub while the
+app runs. Detail in [docs/firmware.md](docs/firmware.md).
 
 ## Recovery
 
 - `noboot.txt` at the flash root → boot straight to a clean REPL (`deploy.py` uses this)
-- hold the ESP32 BOOT button (~10 s) while running → factory reset to the portal
+- hold the Sound button ~5 s → reboot into the WiFi setup portal
+- hold the ESP32 BOOT button ~10 s while running → factory reset (wipe config, reboot to portal)
 - a crash-looping OTA build auto-rolls-back after 3 failed boots
 
 ## Credits

@@ -128,11 +128,11 @@ def _page(device_id, ssids, form=None, msg=""):
         "</span>"
         "<input name=topic_prefix id=tp value=\"%s\" required "
         "autocapitalize=off autocorrect=off></label></fieldset>"
-        "<label>Control-page PIN <span class=hint>(optional)</span>"
+        "<label>PIN <span class=hint>(optional, reserved)</span>"
         "<input name=web_pin value=\"%s\"></label>"
         "<button>Save &amp; restart</button></form>"
-        "<p class=hint>After it restarts, the droid appears in Home Assistant "
-        "automatically (if enabled) and hosts its own control page on your WiFi.</p>"
+        "<p class=hint>After it restarts the droid joins your WiFi and (if MQTT "
+        "is enabled) appears in Home Assistant automatically.</p>"
         "<script>var f=document.forms[0],n=f.device_name,p=f.tp,touched=false;"
         "function sl(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,'-')"
         ".replace(/^-+|-+$/g,'')}"
@@ -225,6 +225,7 @@ def _do_save(conn, device_id, ssids, form):
         "topic_prefix": prefix or config.slug(name) or "r2d2",
         "web_pin": form.get("web_pin", "").strip(),
         "mqtt_enabled": form.get("mqtt_enabled", "") == "on",
+        "network_enabled": True,      # configuring WiFi here means: turn it on
         "configured": True,
     }
     if updates["mqtt_enabled"]:
@@ -309,7 +310,7 @@ def run(device_id):
     except Exception:
         pass
 
-    print("[setup] unconfigured — captive portal up")
+    print("[setup] captive portal up")
     print("[setup]   join WiFi:  %s   password: %s" % (ssid, password))
     print("[setup]   then open:  http://%s/" % AP_IP)
 

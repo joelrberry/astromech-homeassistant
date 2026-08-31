@@ -137,6 +137,9 @@ All of the above are present in the schematic netlist.
 | 18         | `SERVO_PWM`    | Servo connector signal               | 50 Hz hobby servo |
 | 5          | `NPX_IN`       | 74AHCT1G125 A (pin 2)                | shifter input. GPIO5 kept per `docs/firmware.md` (user decision 2026‑08‑29) — it's a boot‑strapping pin (internal pull‑up, fine in practice); accept a possible brief LED flash at power‑on. |
 | —          | `NPX_DATA`     | 74AHCT125 Y1 (pin 3) → 330 Ω → NeoPixel connector(s) | 5 V logic out |
+| 32         | `BTN_MODE_UP` | J_BTN pin 2 → button → GND           | firmware internal pull‑up, active‑low; no external part |
+| 33         | `BTN_MODE_DN` | J_BTN pin 3 → button → GND           | " |
+| 25         | `BTN_SOUND`   | J_BTN pin 4 → button → GND           | " — 5 s hold = WiFi setup portal |
 | VIN        | `+5V`          | shared rail                          | devkit's onboard LDO feeds its own logic |
 | 3V3        | —              | not connected                        | R4 pull‑up removed 2026‑08‑29 (redundant with the firmware internal PU); devkit 3V3 pin left as no‑connect |
 | GND        | `GND`          | —                                    | |
@@ -174,6 +177,7 @@ servo + NeoPixel + DFPlayer branch; wide fill everywhere else.
 | J3 (J_NPX) | JST‑SH 1.0 mm 3‑pin (SMD)           | pins → JP1 P1/P2/P3     | mates the **Bambu XC016** cable (300 mm straight‑through JST‑SH 1.0 3‑pin) to the droid's existing multi‑LED board |
 | JP1     | pin‑order **solder‑bridge field** (custom)| DIN/V+/GND ↔ P1/P2/P3  | the LED board's SH1.0 order can't be measured — JP1 maps DATA/+5V/GND to any of the 3 connector pins. Ships bridged DIN‑P1 / V+‑P2 / GND‑P3; cut & re‑bridge to correct it. V+ = **+5V** (confirmed). |
 | J_SPK   | JST‑PH 2.0 mm 2‑pin                    | SPK+ / SPK−             | 4–8 Ω speaker, DFPlayer pins 6 & 8 — differential, do **not** ground |
+| J_BTN   | 1×4 header, 2.54 mm                    | GND / IO32 / IO33 / IO25 | front‑panel buttons: mode ▲ (IO32), mode ▼ (IO33), sound (IO25). Each button wires between its signal pin and GND; firmware enables the internal pull‑up, so **no external resistors**. Hold the sound button ~5 s = WiFi setup portal. |
 
 ## DFPlayer Mini pinout reference (16‑pin, for J_DFP wiring)
 
@@ -224,8 +228,8 @@ Only VCC/RX/TX/SPK_2/GND/SPK_1/BUSY are wired; DAC/IO/ADKEY/USB left unconnected
    since the LED board can't be probed. Default bridge = DIN/V+/GND (pin 1→3).
    J3 gender: XC016 is a plug‑both‑ends cable; J3 must be the mating SH1.0
    **top/side‑entry SMD socket** — confirm entry direction at layout.
-5. Whether to also break out a couple of spare ESP32 GPIOs to a header for future
-   use (buzzer, etc. — `docs/firmware.md` "where this could go next").
+5. RESOLVED — spare GPIOs are broken out as `J_BTN` (IO32/33/25 + GND) for the
+   three front-panel buttons; firmware drives them with internal pull-ups.
 
 ## Build sequence (KiCad MCP)
 

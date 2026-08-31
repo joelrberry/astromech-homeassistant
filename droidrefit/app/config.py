@@ -38,6 +38,11 @@ _DEFAULTS = {
     "web_pin": "",
     "ota_url": "",   # HTTP mirror base for OTA, e.g. http://192.168.1.50:8000/droidrefit
                      # (empty -> pull from GitHub via mip; required on classic ESP32)
+    "leds_enabled": True,   # False on a unit with no WS2812 pixels wired — the
+                            # NeoPixel/RMT write path is skipped entirely
+    "network_enabled": False,  # offline-first: WiFi/MQTT only run when this is
+                               # True. The setup portal sets it. Reach the portal
+                               # with the Sound-button hold or the factory reset.
     "configured": False,
 }
 
@@ -93,6 +98,8 @@ def _normalise(d):
     except (ValueError, TypeError):
         cfg["mqtt_port"] = 1883
     cfg["mqtt_enabled"] = bool(cfg["mqtt_enabled"])
+    cfg["network_enabled"] = bool(cfg["network_enabled"])
+    cfg["leds_enabled"] = bool(cfg["leds_enabled"])
     cfg["configured"] = bool(cfg["configured"])
     return cfg
 
@@ -139,23 +146,18 @@ def _read_baked():
 
 
 def load():
-    """Normalised config dict, or None if the board is unconfigured.
+    """Always a normalised config dict.
 
-    Precedence: /config.json -> app/config_baked.py (bench) -> None.
+    Precedence: /config.json -> app/config_baked.py (bench) -> offline defaults.
+    Offline-first: a missing or half-written config is just an offline config
+    (network_enabled stays False). WiFi/MQTT are gated on network_enabled, not
+    on the presence of a config — so this never returns None and the board
+    always boots into the app.
     """
     raw = _read_json()
-    from_json = raw is not None
     if raw is None:
         raw = _read_baked()
-    if raw is None:
-        return None
-    cfg = _normalise(raw)
-    if not cfg["wifi_ssid"]:
-        return None
-    if from_json and not cfg["configured"]:
-        return None
-    cfg["configured"] = True
-    return cfg
+    return _normalise(raw or {})
 
 
 def save(updates):

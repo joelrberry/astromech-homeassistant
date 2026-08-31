@@ -1,14 +1,14 @@
-# WiFi + MQTT + Home Assistant discovery, and the command entry points
-# (apply_mode / apply_sound / apply_volume) shared by MQTT and the web panel.
+# WiFi + MQTT + Home Assistant discovery. Optional layer — only runs when
+# core.cfg["network_enabled"]. Commands land via app.control.
 #
-# deps: app.core, app.sound, app.servo, app.diag
+# deps: app.core, app.sound, app.servo, app.diag, app.ota, app.control
 
 import network
 import ujson
 import uasyncio
 
 from umqtt.simple import MQTTClient
-from app import core, sound, servo, diag, ota
+from app import core, sound, servo, diag, ota, control
 
 # ---- MQTT topics ----
 # Every topic, HA unique_id and HA device id is prefixed with this droid's
@@ -63,35 +63,6 @@ MQTT_ORPHANED_DISCOVERY_TOPICS = ([
 ] if PREFIX == 'r2d2' else [])
 
 
-# ---- command entry points (MQTT + web panel both call these) ----
-def apply_mode(mode):
-    if mode not in servo.SERVO_BEHAVIORS:
-        return False
-    core.dbg("[mqtt] switching to mode:", mode)
-    core.state["mode"] = mode
-    return True
-
-
-def apply_sound(name):
-    if name not in sound.SOUND_FOLDERS:
-        return False
-    core.state["sound"] = name
-    sound.play_random_in_folder(name)
-    return True
-
-
-def apply_volume(level):
-    try:
-        level = int(level)
-    except (ValueError, TypeError):
-        return False
-    level = max(0, min(30, level))
-    core.dbg("[mqtt] setting volume to", level)
-    core.state["volume"] = level
-    sound.player.set_volume(level)
-    return True
-
-
 def on_mqtt_message(topic, msg):
     if topic == MQTT_DEBUG_SET_TOPIC:
         want_on = msg.strip().upper() == b'ON'
@@ -118,7 +89,7 @@ def on_mqtt_message(topic, msg):
         except ValueError:
             core.dbg("[mqtt] bad volume payload:", msg)
             return
-        apply_volume(level)
+        control.apply_volume(level)
         return
 
     if topic == MQTT_OTA_SET_TOPIC and ota.enabled():
@@ -137,10 +108,10 @@ def on_mqtt_message(topic, msg):
         return
 
     if topic == MQTT_COMMAND_TOPIC:
-        if not apply_mode(payload.get("mode")):
+        if not control.apply_mode(payload.get("mode")):
             core.dbg("[mqtt] unknown/missing mode in payload:", payload)
     elif topic == MQTT_SOUND_COMMAND_TOPIC:
-        if not apply_sound(payload.get("sound")):
+        if not control.apply_sound(payload.get("sound")):
             core.dbg("[mqtt] unknown/missing sound in payload:", payload)
 
 
@@ -355,6 +326,8 @@ def publish_discovery(client):
                 state_class="total_increasing")
     diag_sensor("wifi_assoc", "WiFi Associations", "wifi_assoc",
                 state_class="total_increasing")
+    diag_sensor("idf_free", "Internal RAM Free", "idf_free", "B")
+    diag_sensor("idf_min_free", "Internal RAM Low-Water", "idf_min_free", "B")
     emit(_disc('sensor', 'reset_cause'), {
         "name": "Reset Cause", "unique_id": "reset_cause",
         "state_topic": MQTT_RESET_CAUSE_TOPIC.decode(),
@@ -390,26 +363,10 @@ async def connect_wifi():
         core.log_always("[wifi] could not set PM_NONE:", e)
 
     ip = wlan.ifconfig()[0] if wlan.isconnected() else "?"
-    core.log_always("[wifi] connected:", wlan.isconnected(), "  control page: http://%s/  (http://%s.local/)"
-                    % (ip, core.cfg["hostname"]))
+    core.log_always("[wifi] connected:", wlan.isconnected(), " ip:", ip)
     if wlan.isconnected():
-        core.net_generation += 1
+        core.net_generation += 1     # 'WiFi Associations' diagnostic counter
     core.sync_time()
-
-
-async def wifi_monitor_task():
-    # The ESP32 auto-reconnects WiFi on its own, often without connection_watchdog
-    # ever calling connect_wifi(). Catch that False->True edge too so webui can
-    # rebuild a listener that the drop left stale.
-    wlan = network.WLAN(network.STA_IF)
-    was = wlan.isconnected()
-    while True:
-        await uasyncio.sleep_ms(2000)
-        now = wlan.isconnected()
-        if now and not was:
-            core.net_generation += 1
-            core.log_always("[wifi] reassociated (net gen %d)" % core.net_generation)
-        was = now
 
 
 def _hard_close(client):

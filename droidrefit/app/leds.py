@@ -22,7 +22,10 @@ _N = hw.NEOPIXEL_COUNT
 _TICK_MS = 40                       # ~25 fps
 HOLO, LOGIC, REAR, BAR = 0, 1, 2, 3
 
-_np = neopixel.NeoPixel(machine.Pin(hw.NEOPIXEL_PIN), _N)
+# Built lazily in led_task so a unit with leds_enabled=False never touches the
+# NeoPixel / RMT path at all (each write() cycles an ESP-IDF RMT channel;
+# pointless — and a potential internal-RAM drain — with nothing wired).
+_np = None
 
 # --- palette (kept dim-ish; brightness scales further per reaction) ---
 OFF = (0, 0, 0)
@@ -129,12 +132,40 @@ LED_REACTIONS = {
 
 
 def _all_off():
+    if _np is None:
+        return
     for i in range(_N):
         _np[i] = OFF
     _np.write()
 
 
+_CUES = {"portal": (0, 40, 120), "button": (60, 60, 60)}
+
+
+def cue(name):
+    # Synchronous one-shot flash for feedback from outside led_task (e.g. the
+    # button handler before a reboot). No-op if pixels aren't running.
+    if _np is None:
+        return
+    c = _CUES.get(name, (40, 40, 40))
+    try:
+        for i in range(_N):
+            _np[i] = c
+        _np.write()
+        time.sleep_ms(120)
+        _all_off()
+    except Exception:
+        pass
+
+
 async def led_task():
+    global _np
+    if not core.cfg.get("leds_enabled", True):
+        core.log_always("[leds] disabled (leds_enabled=false) — NeoPixel path idle")
+        while True:
+            await uasyncio.sleep_ms(3600000)
+
+    _np = neopixel.NeoPixel(machine.Pin(hw.NEOPIXEL_PIN), _N)
     chans = [PixelChannel() for _ in range(_N)]
     last_mode = None
     try:
