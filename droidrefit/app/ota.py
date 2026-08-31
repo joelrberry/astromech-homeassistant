@@ -21,7 +21,7 @@ except ImportError:                       # older builds
 
 from app import core, version
 
-_OWNER_REPO = "joelrberry/CyberBrick-HomeAssistant-MQTT"
+_OWNER_REPO = "joelrberry/astromech-homeassistant"
 _BRANCH = "main"
 _SUBDIR = "droidrefit"
 

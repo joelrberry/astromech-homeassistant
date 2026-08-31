@@ -1,0 +1,21 @@
+# --- secrets: never commit ---
+# droidrefit/app/config.py is firmware (the config store) and IS tracked.
+# Real credentials live only in the bench fallback or the device's config.json.
+/droidrefit/app/config_baked.py
+/droidrefit/config.json
+/droidrefit/noboot.txt
+
+# --- copyrighted / large: kept out of the public repo ---
+/r2d2audio.md
+/mp3/
+
+# --- hardware: editor history, tool backups, regenerable project state ---
+.history/
+.mcp-backups/
+*.kicad_prl
+fp-info-cache
+
+# --- misc ---
+.DS_Store
+__pycache__/
+*.pyc

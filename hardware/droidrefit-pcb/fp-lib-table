@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "droidrefit")(type "KiCad")(uri "/Users/joel/Documents/Code/Arduino/CyberBrick-HomeAssistant-MQTT/hardware/droidrefit-pcb/droidrefit.pretty")(options "")(descr ""))
+)

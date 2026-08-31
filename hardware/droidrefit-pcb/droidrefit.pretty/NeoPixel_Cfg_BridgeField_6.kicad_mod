@@ -1,0 +1,82 @@
+(footprint "NeoPixel_Cfg_BridgeField_6"
+  (version 20241229)
+  (generator "kicad-mcp")
+  (generator_version "9.0")
+  (layer "F.Cu")
+  (descr "NeoPixel pin-order solder-bridge field. Left column pads 1/2/3 = DIN / V+ / GND. Right column pads 4/5/6 = connector pins P1 / P2 / P3. Default: blob-bridge 1-4, 2-5, 3-6 (DIN-P1 / V+-P2 / GND-P3). To remap, run a short wire link between the correct source and connector pad.")
+  (tags "solder bridge jumper config neopixel")
+
+  (property "Reference" "REF**" (at 0 -1.27 0)
+    (layer "F.SilkS")
+    (uuid "bf978f50-df14-46fe-a9f3-37d96a5f65c5")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Value" "NeoPixel_Cfg_BridgeField_6" (at 0 1.27 0)
+    (layer "F.Fab")
+    (uuid "30a57029-f642-42c8-8c0b-23a3c687ccbc")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (property "Datasheet" "" (at 0 0 0)
+    (layer "F.Fab")
+    (uuid "176275cf-2e04-4ef4-8e64-d79a0bb7ff26")
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+
+  (fp_rect
+    (start -2.6 -3.6)
+    (end 2.6 3.6)
+    (stroke (width 0.05) (type default))
+    (fill none)
+    (layer "F.CrtYd")
+    (uuid "32f1f21c-6761-4fad-82c2-906693871bc5")
+  )
+
+  (pad "1" smd roundrect
+    (at -1 -2)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "263c0b0a-c1d2-4699-8f54-9b0d44024791")
+  )
+
+  (pad "2" smd roundrect
+    (at -1 0)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "70ddcdbf-ace1-4046-bf68-da8926e25572")
+  )
+
+  (pad "3" smd roundrect
+    (at -1 2)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "41de043f-2689-43c9-96c9-af238233ed3c")
+  )
+
+  (pad "4" smd roundrect
+    (at 1 -2)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "933041d3-168e-4a3c-aeb3-0c36917a3683")
+  )
+
+  (pad "5" smd roundrect
+    (at 1 0)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "457a1ffe-7b01-4e52-b0f0-08f380f1eddf")
+  )
+
+  (pad "6" smd roundrect
+    (at 1 2)
+    (size 1.2 1.4)
+    (layers "F.Cu" "F.Paste" "F.Mask")
+    (roundrect_rratio 0.25)
+    (uuid "81124525-70f1-4fae-b4a1-270a1ca0bf17")
+  )
+
+)
