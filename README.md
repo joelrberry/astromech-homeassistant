@@ -61,8 +61,7 @@ web-panel Firmware section appear. Detail in [docs/firmware.md](docs/firmware.md
 
 ## Recovery
 
-- `noboot.txt` at the flash root → boot straight to a clean REPL
-- Ctrl-C during the 2 s boot countdown → same
+- `noboot.txt` at the flash root → boot straight to a clean REPL (`deploy.py` uses this)
 - hold the ESP32 BOOT button (~10 s) while running → factory reset to the portal
 - a crash-looping OTA build auto-rolls-back after 3 failed boots
 

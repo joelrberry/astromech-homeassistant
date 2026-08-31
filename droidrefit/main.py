@@ -69,14 +69,12 @@ except OSError:
     pass
 
 
-# --- recovery hatches, checked before the app starts ---
-# 1. /noboot.txt sentinel file: hard skip. Create it from the REPL
+# --- recovery hatch, checked before the app starts ---
+# /noboot.txt sentinel file: hard skip. Create it from the REPL
 #      open("noboot.txt", "w").close()
 #    reset -> clean REPL. Remove it
 #      os.remove("noboot.txt")
-#    and reset to run normally.
-# 2. A short Ctrl-C window: hit Ctrl-C during the countdown for the same thing
-#    without needing the file.
+#    and reset to run normally. (tools/deploy.py manages this file for you.)
 _skip = False
 try:
     os.stat("noboot.txt")
@@ -87,14 +85,6 @@ try:
     print("=" * 54 + "\n")
 except OSError:
     pass
-
-if not _skip:
-    try:
-        print("[boot] app starting in 2s  (Ctrl-C for REPL)")
-        time.sleep(2)
-    except KeyboardInterrupt:
-        _skip = True
-        print("[boot] interrupted — staying at the REPL")
 
 if not _skip:
     try:

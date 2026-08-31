@@ -89,8 +89,8 @@ task on a crash and counts restarts (surfaced in diagnostics).
 
 | Hatch | Trigger | Effect |
 |---|---|---|
-| Safe mode | `noboot.txt` present at FS root | print a banner, don't start the app → clean REPL |
-| Ctrl-C window | during the 2 s boot countdown | same |
+| Safe mode | `noboot.txt` present at FS root | print a banner, don't start the app → clean REPL (`tools/deploy.py` uses this) |
+| Ctrl-C | any time the app / asyncio loop is running | drops to the REPL (not a boot-time countdown — that was removed as a stray byte on the serial line could trip it) |
 | OTA rollback | `/ota.flag` present and boot count > 2 | restore `/bak` (pre-update files), reboot the old build |
 | Factory reset | hold `GPIO0` ~10 s while running | scream, wipe `/config.json`, reboot to the portal |
 | Connect-fail fallback | (planned) WiFi never associates for ~5 min | reboot to the portal |
