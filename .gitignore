@@ -19,3 +19,7 @@ fp-info-cache
 .DS_Store
 __pycache__/
 *.pyc
+
+# device config pulled off a board — real credentials
+config.json.devicebackup
+*.devicebackup
