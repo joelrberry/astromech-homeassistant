@@ -33,13 +33,23 @@ No 12 V input without adding a buck + bumping the bulk caps to 16–25 V.
 
 ```
 pip install mpremote
-python3 tools/deploy.py --wipe --run      # first load
-python3 tools/deploy.py                    # after an edit
+python3 tools/deploy.py --wipe     # first load
+python3 tools/deploy.py            # after an edit
 ```
 
-`deploy.py` copies `app/`, `lib/`, `boot.py`, `main.py`, then imports every
-module on the device so a bad transfer fails loudly instead of at next boot.
-It never touches `/config.json` or `/noboot.txt`.
+`deploy.py` holds the board in **safe mode** for the whole copy (`noboot.txt`
++ reset, so the app isn't running and nothing competes for the flaky USB
+link), copies `app/`, `lib/`, `boot.py`, `main.py` **one file at a time,
+SHA-256-verifying each on the device and re-copying on mismatch**, then imports
+every module. Only when all of that passes does it remove `noboot.txt` and
+reboot into the app. A failed or interrupted run leaves the board safely at
+the REPL — re-run and it converges (only unverified files are re-sent). It
+never writes `/config.json`.
+
+- `--stay` — deploy but leave the board in safe mode at the REPL.
+- `--format` — reformat the flash filesystem first (last resort; also wipes
+  `/config.json`). Use only if verified copies keep failing on the *same*
+  file, which points at a corrupt filesystem rather than a flaky cable.
 
 **First boot with no config** → the board hosts an open-ended WiFi AP
 `R2-D2-XXXX` (WPA2, sticker password). Join it from any phone; the setup page

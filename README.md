@@ -35,8 +35,13 @@ you power the ESP32 over its own USB.
 
 ```
 pip install mpremote
-python3 tools/deploy.py --wipe --run
+python3 tools/deploy.py --wipe
 ```
+
+`deploy.py` stages the copy in safe mode and SHA-verifies every file, retrying
+over a flaky USB link; a failed run leaves the board at a safe REPL, and
+re-running converges. `--stay` leaves it in safe mode; `--format` reformats
+the flash (last resort).
 
 First boot with no config, the board hosts a WiFi AP **`R2-D2-XXXX`** — join it
 from a phone, the setup page opens, enter WiFi + a droid name (tick "Connect to
