@@ -24,6 +24,7 @@ is an external 5 V rail everything hangs off directly; the
 | DFPlayer BUSY | `GPIO4` | active-low, playback-finished detect |
 | NeoPixel data | `GPIO5` | 4 pixels; via a `74AHCT1G125` 3.3→5 V shifter on the PCB (often fine direct on a short bench run). Skipped entirely when `leds_enabled` is false |
 | Button: mode ▲ / mode ▼ / sound | `GPIO32` / `GPIO33` / `GPIO25` | each pin↔GND, internal pull-up, active-low. PCB header `J_BTN` |
+| Piezo buzzer | `GPIO27` | `machine.PWM`; pin↔piezo↔GND. Skipped when `buzzer_enabled` is false |
 | Factory-reset | `GPIO0` | the devkit BOOT button, held ~10 s while running |
 
 Power: **5 V, 3 A+** into the rail. Servo, DFPlayer and pixels wire straight to
@@ -74,8 +75,8 @@ in it to auto-connect.
 ```
 hw, core, config, version   leaves
 sound  -> core, hw           servo -> core, sound, hw     leds -> core, hw
-diag   -> core               ota   -> core, version
-control -> core, sound, servo         buttons -> core, hw, control
+diag   -> core               ota   -> core, version      fx -> core, hw
+control -> core, sound, servo         buttons -> core, hw, control, fx
 net    -> core, sound, servo, diag, ota, control
 provisioning -> config, core          main -> everything
 ```
@@ -99,7 +100,7 @@ reboots on save). Else `core.init(cfg)`, import modules, and — only when
 | Safe mode | `noboot.txt` present at FS root | print a banner, don't start the app → clean REPL (`tools/deploy.py` uses this) |
 | Ctrl-C | any time the app / asyncio loop is running | drops to the REPL (not a boot-time countdown — that was removed as a stray byte on the serial line could trip it) |
 | OTA rollback | `/ota.flag` present and boot count > 2 | restore `/bak` (pre-update files), reboot the old build |
-| Setup portal | hold the Sound button ~5 s | write `/portal.flag`, reboot → AP + config portal |
+| Setup portal | **Mode ▲ + Sound** held ~5 s | write `/portal.flag`, reboot → AP portal. Self-recovers after 5 min idle; a Cancel link exits without saving |
 | Factory reset | hold `GPIO0` ~10 s while running | scream, wipe `/config.json`, write `/portal.flag`, reboot → portal |
 
 ## Config store — `app/config.py`
@@ -108,24 +109,29 @@ reboots on save). Else `core.init(cfg)`, import modules, and — only when
 `load()` **always** returns a normalised dict — no file just means offline
 defaults (`network_enabled = false`); `save()` is atomic; `wipe()` clears it.
 Key flags: `network_enabled` (gate on all WiFi/MQTT), `mqtt_enabled`,
-`leds_enabled` (skip the NeoPixel/RMT path). `topic_prefix` (a slug of the
-droid name, or `r2d2`) is the single per-droid identity — MQTT client id, the
-whole topic tree, every HA `unique_id`, the HA device id.
+`leds_enabled` (skip the NeoPixel/RMT path), `buzzer_enabled`. `topic_prefix`
+(a slug of the droid name, or `r2d2`) is the single per-droid identity — MQTT
+client id, the whole topic tree, every HA `unique_id`, the HA device id.
 
 ## Control — buttons (`app/buttons.py` → `app/control.py`)
 
 Three buttons on `GPIO32/33/25`, pin↔GND, internal pull-up, active-low —
 `button_task` polls at 50 ms:
 
-- **mode ▲ / mode ▼** — step `core.state["mode"]` through `control.MODE_CYCLE`
-  (the 7 resting modes; `system_crash` is HA-only), wrapping. Auto-repeats
-  every 400 ms while held.
-- **sound** — tap (<0.8 s) fires a random sound category; **hold ~5 s** writes
-  `/portal.flag` and reboots into the WiFi setup portal.
+- **mode ▲ / mode ▼** — **tap** (<0.5 s) steps `core.state["mode"]` through
+  `control.MODE_CYCLE` (the 7 resting modes; `system_crash` is HA-only),
+  wrapping. **Press-and-hold** (>0.5 s) = volume ±1 every 0.25 s while held.
+- **sound** — tap (<0.8 s) fires a random sound category.
+- **Mode ▲ + Sound** held ~5 s — the config-portal chord (deliberate; a lone
+  button can't trigger it).
 
-`control.apply_mode / apply_sound / apply_volume / cycle_mode` are the single
-code path — buttons, MQTT, and the portal all call them. The dome NeoPixels
-already encode the current mode (`leds.LED_REACTIONS`), so that's the feedback.
+`control.apply_mode / apply_sound / apply_volume / nudge_volume / cycle_mode`
+are the single code path — buttons, MQTT and the portal all call them.
+
+**Feedback:** `app/fx.py` drives a piezo on `GPIO27` (`machine.PWM`) for a
+volume tick (pitch tracks the level), a mode-change blip, the portal-entry
+chirp, and save/error tones. The dome NeoPixels also encode the current mode
+(`leds.LED_REACTIONS`).
 
 ## Control — Home Assistant *(only when `network_enabled`)*
 

@@ -40,6 +40,7 @@ _DEFAULTS = {
                      # (empty -> pull from GitHub via mip; required on classic ESP32)
     "leds_enabled": True,   # False on a unit with no WS2812 pixels wired — the
                             # NeoPixel/RMT write path is skipped entirely
+    "buzzer_enabled": True, # False on a unit with no piezo on hw.BUZZER_PIN
     "network_enabled": False,  # offline-first: WiFi/MQTT only run when this is
                                # True. The setup portal sets it. Reach the portal
                                # with the Sound-button hold or the factory reset.
@@ -100,6 +101,7 @@ def _normalise(d):
     cfg["mqtt_enabled"] = bool(cfg["mqtt_enabled"])
     cfg["network_enabled"] = bool(cfg["network_enabled"])
     cfg["leds_enabled"] = bool(cfg["leds_enabled"])
+    cfg["buzzer_enabled"] = bool(cfg["buzzer_enabled"])
     cfg["configured"] = bool(cfg["configured"])
     return cfg
 

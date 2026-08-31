@@ -11,6 +11,7 @@
     ["app/servo.py",        "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/servo.py"],
     ["app/leds.py",         "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/leds.py"],
     ["app/ota.py",          "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/ota.py"],
+    ["app/fx.py",           "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/fx.py"],
     ["app/net.py",          "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/net.py"],
     ["app/control.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/control.py"],
     ["app/buttons.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/buttons.py"],

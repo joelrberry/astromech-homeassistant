@@ -17,7 +17,8 @@ MODE_CYCLE = ("standby", "awake", "excited", "surveillance",
 def apply_mode(mode):
     if mode not in servo.SERVO_BEHAVIORS:
         return False
-    core.dbg("[control] mode ->", mode)
+    if mode != core.state["mode"]:
+        core.log_always("[mode]", mode)
     core.state["mode"] = mode
     return True
 
@@ -37,6 +38,7 @@ def cycle_mode(step):
 def apply_sound(name):
     if name not in sound.SOUND_FOLDERS:
         return False
+    core.log_always("[sound]", name)
     core.state["sound"] = name
     sound.play_random_in_folder(name)
     return True
@@ -54,7 +56,15 @@ def apply_volume(level):
     except (ValueError, TypeError):
         return False
     level = max(0, min(30, level))
-    core.dbg("[control] volume ->", level)
+    if level != core.state["volume"]:
+        core.log_always("[volume]", level)
     core.state["volume"] = level
     sound.player.set_volume(level)
     return True
+
+
+def nudge_volume(step):
+    """Bump volume by step, clamped 0-30. Returns the new level."""
+    new = max(0, min(30, core.state["volume"] + step))
+    apply_volume(new)
+    return new

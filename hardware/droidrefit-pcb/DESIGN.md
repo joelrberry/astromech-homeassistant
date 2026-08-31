@@ -139,7 +139,8 @@ All of the above are present in the schematic netlist.
 | —          | `NPX_DATA`     | 74AHCT125 Y1 (pin 3) → 330 Ω → NeoPixel connector(s) | 5 V logic out |
 | 32         | `BTN_MODE_UP` | J_BTN pin 2 → button → GND           | firmware internal pull‑up, active‑low; no external part |
 | 33         | `BTN_MODE_DN` | J_BTN pin 3 → button → GND           | " |
-| 25         | `BTN_SOUND`   | J_BTN pin 4 → button → GND           | " — 5 s hold = WiFi setup portal |
+| 25         | `BTN_SOUND`   | J_BTN pin 4 → button → GND           | " — tap = sound; Mode▲+Sound 5 s = WiFi setup |
+| 27         | `BUZZER`      | → piezo → GND (J_BUZZER)             | `machine.PWM` UI feedback. Bare piezo disc + ~100 Ω series R for a quiet beep; option: 2N7002 low‑side + piezo from +5 V for louder |
 | VIN        | `+5V`          | shared rail                          | devkit's onboard LDO feeds its own logic |
 | 3V3        | —              | not connected                        | R4 pull‑up removed 2026‑08‑29 (redundant with the firmware internal PU); devkit 3V3 pin left as no‑connect |
 | GND        | `GND`          | —                                    | |
@@ -177,7 +178,8 @@ servo + NeoPixel + DFPlayer branch; wide fill everywhere else.
 | J3 (J_NPX) | JST‑SH 1.0 mm 3‑pin (SMD)           | pins → JP1 P1/P2/P3     | mates the **Bambu XC016** cable (300 mm straight‑through JST‑SH 1.0 3‑pin) to the droid's existing multi‑LED board |
 | JP1     | pin‑order **solder‑bridge field** (custom)| DIN/V+/GND ↔ P1/P2/P3  | the LED board's SH1.0 order can't be measured — JP1 maps DATA/+5V/GND to any of the 3 connector pins. Ships bridged DIN‑P1 / V+‑P2 / GND‑P3; cut & re‑bridge to correct it. V+ = **+5V** (confirmed). |
 | J_SPK   | JST‑PH 2.0 mm 2‑pin                    | SPK+ / SPK−             | 4–8 Ω speaker, DFPlayer pins 6 & 8 — differential, do **not** ground |
-| J_BTN   | 1×4 header, 2.54 mm                    | GND / IO32 / IO33 / IO25 | front‑panel buttons: mode ▲ (IO32), mode ▼ (IO33), sound (IO25). Each button wires between its signal pin and GND; firmware enables the internal pull‑up, so **no external resistors**. Hold the sound button ~5 s = WiFi setup portal. |
+| J_BTN   | 1×4 header, 2.54 mm                    | GND / IO32 / IO33 / IO25 | front‑panel buttons: mode ▲ (IO32), mode ▼ (IO33), sound (IO25). Each wires between its signal pin and GND; firmware internal pull‑up, **no external resistors**. Tap = cycle / hold = volume; Mode ▲ + Sound 5 s = WiFi setup. |
+| J_BUZZER | 1×2 header, 2.54 mm (or onboard piezo pads) | IO27 / GND         | piezo buzzer for UI feedback. Direct off IO27 through ~100 Ω for a quiet beep; footprint should also allow a 2N7002 low‑side driver + piezo from +5 V. Skipped in firmware when `buzzer_enabled` is false. |
 
 ## DFPlayer Mini pinout reference (16‑pin, for J_DFP wiring)
 

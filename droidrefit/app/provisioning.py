@@ -131,6 +131,9 @@ def _page(device_id, ssids, form=None, msg=""):
         "<label>PIN <span class=hint>(optional, reserved)</span>"
         "<input name=web_pin value=\"%s\"></label>"
         "<button>Save &amp; restart</button></form>"
+        "<p class=hint><a href=/cancel>Cancel</a> &mdash; leave settings "
+        "unchanged and go back to running. (The portal also does this on its "
+        "own after 5 minutes with nobody connected.)</p>"
         "<p class=hint>After it restarts the droid joins your WiFi and (if MQTT "
         "is enabled) appears in Home Assistant automatically.</p>"
         "<script>var f=document.forms[0],n=f.device_name,p=f.tp,touched=false;"
@@ -263,6 +266,12 @@ def _handle(conn, device_id, st):
     if method == "POST" and path == "/save":
         _do_save(conn, device_id, st["ssids"], _parse_form(body.decode()))
         return
+    if path == "/cancel":
+        _send(conn, 200, "text/html",
+              "<!doctype html><meta charset=utf-8><h1>Resuming</h1>"
+              "<p>No changes. The droid is restarting.</p>")
+        time.sleep(1)
+        machine.reset()
     if method == "GET" and path == "/scan":
         st["ssids"] = _scan(st["sta"])
         _send(conn, 200, "application/json",
@@ -331,9 +340,17 @@ def run(device_id):
     poll.register(dns, select.POLLIN)
     poll.register(http, select.POLLIN)
 
+    # Self-heal: if the portal was entered by accident (button chord) and nobody
+    # joins the AP, reboot back into normal operation. A connected phone keeps
+    # last_seen fresh via its constant captive-portal DNS/HTTP probes.
+    _IDLE_RESET_MS = 300000
+    last_seen = time.ticks_ms()
+
     st = {"ssids": ssids, "sta": sta}
     while True:
-        for sock, _ev in poll.poll(2000):
+        events = poll.poll(2000)
+        for sock, _ev in events:
+            last_seen = time.ticks_ms()
             if sock is dns:
                 try:
                     data, addr = dns.recvfrom(320)
@@ -355,3 +372,6 @@ def run(device_id):
                         conn.close()
                     except Exception:
                         pass
+        if time.ticks_diff(time.ticks_ms(), last_seen) > _IDLE_RESET_MS:
+            print("[setup] idle 5 min, nobody connected — resuming normal boot")
+            machine.reset()

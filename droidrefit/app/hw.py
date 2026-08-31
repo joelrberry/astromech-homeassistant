@@ -20,6 +20,10 @@ BTN_MODE_UP_PIN = 32
 BTN_MODE_DOWN_PIN = 33
 BTN_SOUND_PIN = 25
 
+# Piezo buzzer for UI feedback (app.fx). Pin <-> piezo <-> GND; the PWM object
+# is built in app.fx, not here.
+BUZZER_PIN = 27
+
 # --- peripherals (constructed once, at import) ---
 # The servo PWM object (app.servo) and the NeoPixel object (app.leds) are built
 # in their own modules, not here.
