@@ -58,3 +58,21 @@ and the web panel). Full detail in [docs/firmware.md](docs/firmware.md).
 - Ctrl-C during the 2 s boot countdown → same
 - hold the ESP32 BOOT button (~10 s) while running → factory reset to the portal
 - a crash-looping OTA build auto-rolls-back after 3 failed boots
+
+## Credits
+
+- **The droid** — [*Build-A-Droid: CyberBrick based robot kit*](https://makerworld.com/en/models/1549117-build-a-droid-cyberbrick-based-robot-kit)
+  by **Neebick** on MakerWorld. That's the printed astromech this firmware
+  drives; this repo is only the electronics + software, not the model.
+  Licensed Creative Commons (see the model page for the exact variant and
+  follow its attribution / non-commercial / share-alike terms).
+- **`droidrefit/lib/umqtt/simple.py`** — vendored **unmodified** from
+  [micropython-lib](https://github.com/micropython/micropython-lib/blob/master/micropython/umqtt.simple/umqtt/simple.py)
+  (MIT). MicroPython ships no MQTT client.
+- **`droidrefit/lib/dfplayer.py`** — a minimal DFPlayer Mini (YX5200) UART
+  driver written for this project; the frame/checksum protocol is per the
+  DFPlayer Mini datasheet and the widely-published community command tables,
+  not copied from a specific library.
+- **[MicroPython](https://micropython.org/)** (MIT) — the runtime.
+- The earlier CyberBrick chapter leaned on CyberBrick's own `/bbl` driver
+  library — see [docs/cyberbrick-origins.md](docs/cyberbrick-origins.md#acknowledgments).

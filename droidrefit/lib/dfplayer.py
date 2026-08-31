@@ -1,12 +1,11 @@
 # Minimal DFPlayer Mini (YX5200) UART driver.
 #
-# Not a vendored third-party library on purpose — this is the exact frame
-# protocol already hand-validated against the real hardware during this
-# project's bench test (see /r2d2audio.md "Testing plan"): RESET, TF-card
-# detection, PLAY_FOLDER_TRACK, and SET_VOLUME all confirmed working with
-# this checksum/frame layout. Small and custom, matching this project's
-# general preference for driving simple protocols directly over pulling in
-# a dependency for a handful of commands.
+# Written for this project rather than vendored — the frame/checksum protocol
+# is per the DFPlayer Mini datasheet and the widely-published community
+# command tables, not copied from a specific library. Only the handful of
+# commands this build needs (RESET, TF-card select, PLAY_FOLDER_TRACK,
+# SET_VOLUME, status queries), all hand-validated against real hardware on
+# the bench.
 #
 # Frame layout: 0x7E (start) | 0xFF (version) | 0x06 (length) | cmd |
 # feedback | param1 | param2 | checksum_hi | checksum_lo | 0xEF (end)
