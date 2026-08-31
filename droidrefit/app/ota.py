@@ -48,12 +48,26 @@ def _base_url():
                % (_OWNER_REPO, _BRANCH, _SUBDIR))
 
 
+def _prep_mem(where):
+    # TLS to GitHub on a classic ESP32 needs a big contiguous block for the
+    # mbedTLS handshake — collect hard first and log how much room we have.
+    gc.collect()
+    gc.collect()
+    try:
+        free = gc.mem_free()
+        core.log_always("[ota] %s: free heap %d" % (where, free))
+        return free
+    except Exception:
+        return None
+
+
 def _mip_spec():
     u = core.cfg.get("ota_url")
     return u if u else "github:%s/%s" % (_OWNER_REPO, _SUBDIR)
 
 
 async def check():
+    _prep_mem("check")
     try:
         r = requests.get(_base_url() + "/app/version.py", timeout=10)
         txt = r.text
@@ -62,6 +76,7 @@ async def check():
         state["status"] = "error"
         state["msg"] = "check: %s" % e
         _touch()
+        core.log_always("[ota] check failed:", e)
         return
     latest = None
     for line in txt.split("\n"):
@@ -77,6 +92,7 @@ async def check():
 
 
 def _managed_paths():
+    _prep_mem("manifest")
     try:
         r = requests.get(_base_url() + "/package.json", timeout=10)
         pkg = json.loads(r.text)
@@ -149,7 +165,7 @@ async def update():
         _touch()
         return
 
-    gc.collect()
+    _prep_mem("install")
     try:
         import mip
         mip.install(_mip_spec(), target="/", version=_BRANCH, mpy=False)
