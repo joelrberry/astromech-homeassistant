@@ -33,17 +33,19 @@ _wlan = None
 
 
 def _net_line():
+    # bare IP (max 15 chars) when up; a word otherwise — "net  192.168.1.234"
+    # would run past the 16-char line.
     global _wlan
     if network is None:
-        return "net  n/a"
+        return "no wifi"
     try:
         if _wlan is None:
             _wlan = network.WLAN(network.STA_IF)
         if _wlan.isconnected():
-            return "net  " + _wlan.ifconfig()[0]
-        return "net  offline"
+            return _wlan.ifconfig()[0]
+        return "wifi offline"
     except Exception:
-        return "net  offline"
+        return "wifi offline"
 
 
 def _status_line(mode, sound, moving):
