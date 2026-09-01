@@ -24,7 +24,9 @@ AP_IP = "192.168.4.1"
 
 
 def _oled_show(title, lines):
-    """Best-effort — draw a few lines on the OLED if one is fitted. Never raises."""
+    """Best-effort — draw a few lines on the OLED if one is fitted. Never raises.
+    The 8x8 font fits 16 chars/line; a "label value" line longer than that is
+    wrapped to the label then an indented value on the next row."""
     try:
         from app import oled
         d = oled.open()
@@ -33,10 +35,17 @@ def _oled_show(title, lines):
         d.fill(0)
         d.text(title[:16], 0, 0)
         d.hline(0, 11, 128, 1)
-        y = 18
+        y = 15
         for ln in lines:
-            d.text(str(ln)[:16], 0, y)
-            y += 12
+            ln = str(ln)
+            if len(ln) > 16 and " " in ln:
+                lbl, val = ln.split(" ", 1)
+                d.text(lbl[:16], 0, y)
+                d.text((" " + val)[:16], 0, y + 8)
+                y += 17
+            else:
+                d.text(ln[:16], 0, y)
+                y += 10
         d.show()
     except Exception:
         pass
@@ -342,8 +351,8 @@ def run(device_id):
     print("[setup] captive portal up")
     print("[setup]   join WiFi:  %s   password: %s" % (ssid, password))
     print("[setup]   then open:  http://%s/" % AP_IP)
-    _oled_show("WiFi setup", ("join  " + ssid, "pass  " + password,
-                              "open  " + AP_IP))
+    _oled_show("WiFi setup", ("join " + ssid, "pass " + password,
+                              "open " + AP_IP))
 
     dns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dns.setblocking(False)
