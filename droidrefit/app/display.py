@@ -73,15 +73,19 @@ def _render(d, name, mode, vol, status, net_line):
 
 async def display_task():
     d = None
-    while d is None:
+    for _ in range(4):                 # a panel can be slow to wake at power-on
         try:
             d = oled.open()
         except Exception:
             d = None
-        if d is None:
-            core.log_always("[display] no SSD1306 on I2C %d/%d — retry in 30s"
-                            % (oled.SDA_PIN, oled.SCL_PIN))
-            await uasyncio.sleep_ms(30000)
+        if d is not None:
+            break
+        await uasyncio.sleep_ms(2000)
+    if d is None:
+        core.log_always("[display] no SSD1306 on I2C %d/%d — display off"
+                        % (oled.SDA_PIN, oled.SCL_PIN))
+        while True:                     # one line, then quiet forever
+            await uasyncio.sleep_ms(3600000)
 
     core.log_always("[display] SSD1306 up")
     last = None
