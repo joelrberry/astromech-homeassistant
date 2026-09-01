@@ -137,10 +137,13 @@ async def log_task():
 async def supervise(name, coro_func, *args):
     # Runs a task and restarts it if it ever raises — without this,
     # uasyncio.gather() aborts ALL sibling tasks the moment any ONE throws.
+    # A supervised task is meant to run forever; if it *returns* that's a bug —
+    # back off and log it rather than tight-looping the re-spawn.
     while True:
         try:
             await coro_func(*args)
+            log_always("[supervisor]", name, "returned unexpectedly — restarting in 2s")
         except Exception as e:
             task_restarts[name] = task_restarts.get(name, 0) + 1
-            dbg("[supervisor]", name, "crashed:", e, "- restarting in 2s")
-            await uasyncio.sleep_ms(2000)
+            log_always("[supervisor]", name, "crashed:", e, "- restarting in 2s")
+        await uasyncio.sleep_ms(2000)

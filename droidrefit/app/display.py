@@ -72,31 +72,34 @@ def _render(d, name, mode, vol, status, net_line):
 
 
 async def display_task():
-    d = oled.open()
-    if d is None:
-        core.log_always("[display] no SSD1306 on I2C %d/%d — display idle"
-                        % (oled.SDA_PIN, oled.SCL_PIN))
-        while True:
-            await uasyncio.sleep_ms(3600000)
+    d = None
+    while d is None:
+        try:
+            d = oled.open()
+        except Exception:
+            d = None
+        if d is None:
+            core.log_always("[display] no SSD1306 on I2C %d/%d — retry in 30s"
+                            % (oled.SDA_PIN, oled.SCL_PIN))
+            await uasyncio.sleep_ms(30000)
 
     core.log_always("[display] SSD1306 up")
     last = None
     last_draw = time.ticks_ms()
     while True:
-        name = core.cfg.get("device_name") or "droidrefit"
-        mode = core.state["mode"]
-        vol = core.state["volume"]
-        status = _status_line(mode, core.state["sound"],
-                              core.servo_state.get("moving"))
-        net_line = _net_line()
-
-        cur = (name, mode, vol, status, net_line)
-        now = time.ticks_ms()
-        if cur != last or time.ticks_diff(now, last_draw) > _FORCE_MS:
-            try:
+        try:
+            name = core.cfg.get("device_name") or "droidrefit"
+            mode = core.state["mode"]
+            vol = core.state["volume"]
+            status = _status_line(mode, core.state["sound"],
+                                  core.servo_state.get("moving"))
+            net_line = _net_line()
+            cur = (name, mode, vol, status, net_line)
+            now = time.ticks_ms()
+            if cur != last or time.ticks_diff(now, last_draw) > _FORCE_MS:
                 _render(d, name, mode, vol, status, net_line)
-            except Exception as e:
-                core.dbg("[display] render failed:", e)
-            last = cur
-            last_draw = now
+                last = cur
+                last_draw = now
+        except Exception as e:
+            core.dbg("[display] loop error:", e)
         await uasyncio.sleep_ms(_REFRESH_MS)
