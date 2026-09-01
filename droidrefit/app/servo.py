@@ -38,10 +38,9 @@ SERVO_MAX_ACCEL = 1200   # deg/s^2 — accel + decel ramp; main "snappy vs jerky
 ARRIVE_EPS = 1.0         # deg — "close enough" to count as arrived and stop
 
 # Per-behaviour cruise speeds (deg/s). Old sweeps were ms/deg:
-# alert 10 -> 100, surveillance 30 -> 33, excited 15 -> 67, wander 40 -> 25.
+# alert 10 -> 100, surveillance 30 -> 33, wander 40 -> 25.
 SPEED_ALERT = 100
 SPEED_SURVEIL = 33
-SPEED_EXCITED = 67
 SPEED_WANDER = 25
 SPEED_TREMBLE = 200
 SPEED_SETTLE = 90
@@ -62,19 +61,20 @@ def _clamp(x, lo, hi):
     return lo if x < lo else (hi if x > hi else x)
 
 
-def _approach(pos, vel, setpoint, max_vel, dt):
+def _approach(pos, vel, setpoint, max_vel, max_accel, dt):
     # Trapezoidal-velocity move toward `setpoint`: ramp `vel` toward the fastest
     # speed from which we can still brake to a stop exactly on arrival
     # (v = sqrt(2*a*d)), accel-limited both ways. Snaps to the target on the
-    # final tick so discrete stepping can't overshoot.
+    # final tick so discrete stepping can't overshoot. `max_accel` is per-move
+    # (a behaviour can crack harder than the SERVO_MAX_ACCEL default).
     err = setpoint - pos
     dist = abs(err)
     if dist < ARRIVE_EPS and abs(vel) < ARRIVE_EPS:
         return setpoint, 0.0
-    v_brake = math.sqrt(2 * SERVO_MAX_ACCEL * dist)
+    v_brake = math.sqrt(2 * max_accel * dist)
     v_cap = v_brake if v_brake < max_vel else max_vel
     v_des = v_cap if err > 0 else -v_cap
-    dv_max = SERVO_MAX_ACCEL * dt
+    dv_max = max_accel * dt
     dv = _clamp(v_des - vel, -dv_max, dv_max)
     vel += dv
     step = vel * dt
@@ -104,9 +104,43 @@ class _Hold:
         return self.angle, self.speed
 
 
+class _Excited:
+    # Snappy darts to random spots with a short pause between; ~40% of the time
+    # a quick second dart ("double-take") before the longer settle. Mode:
+    # excited. Returns a 3-tuple so it can crack harder than the default accel.
+    SPEED = 150          # deg/s dart cruise
+    ACCEL = 2200         # deg/s^2 (default is 1200)
+
+    def __init__(self):
+        self.goal = None
+        self.phase = "wait"       # wait -> dart -> [dart again] -> wait ...
+        self.until = None
+        self.did_double = False
+
+    def target(self, now, pos):
+        if self.goal is None:
+            self.goal = pos
+        if self.phase == "wait":
+            if self.until is None:
+                self.until = time.ticks_add(now, core.rand_ms(1500, 3500))
+            elif time.ticks_diff(now, self.until) >= 0:
+                self.goal = _pick_target(pos, min_travel=45)
+                self.phase, self.until, self.did_double = "dart", None, False
+                core.dbg("[servo] excited dart ->", self.goal)
+        elif self.phase == "dart":
+            if abs(pos - self.goal) < ARRIVE_EPS:
+                if not self.did_double and core.rand_between(0, 9) < 4:
+                    self.did_double = True
+                    self.goal = _pick_target(pos, min_travel=25)
+                    core.dbg("[servo] excited double-take ->", self.goal)
+                else:
+                    self.phase, self.until = "wait", None
+        return self.goal, self.SPEED, self.ACCEL
+
+
 class _Sweep:
     # Oscillate lo<->hi forever at a fixed speed. Flips a hair before the end
-    # so the turnaround rounds off instead of stopping dead. Modes: excited,
+    # so the turnaround rounds off instead of stopping dead. Modes:
     # surveillance, alert.
     def __init__(self, lo, hi, speed):
         self.lo = lo
@@ -209,7 +243,7 @@ SERVO_BEHAVIORS = {  # mode -> zero-arg factory (fresh state machine per switch)
     "standby": lambda: _Wander(180000, 300000, SPEED_WANDER,
                                hold_ms=5000, suspend_ms=4000, home=90),
     "awake": lambda: _Wander(120000, 300000, SPEED_WANDER),
-    "excited": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_EXCITED),
+    "excited": lambda: _Excited(),
     "surveillance": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_SURVEIL),
     "alert": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_ALERT),
     "sleep": lambda: _Hold(90),
@@ -262,9 +296,11 @@ async def servo_task():
             revert_to = revert_at = None
 
         now = time.ticks_ms()
-        setpoint, vmax = behavior.target(now, pos)
+        res = behavior.target(now, pos)
+        setpoint, vmax = res[0], res[1]
+        accel = res[2] if len(res) > 2 else SERVO_MAX_ACCEL
         setpoint = _clamp(setpoint, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE)
-        pos, vel = _approach(pos, vel, setpoint, vmax, TICK_S)
+        pos, vel = _approach(pos, vel, setpoint, vmax, accel, TICK_S)
         pos = _clamp(pos, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE)
         servo.duty_u16(angle_to_duty_u16(pos))
         core.servo_state["angle"] = pos

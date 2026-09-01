@@ -22,7 +22,7 @@ _FORCE_MS = 5000
 _VERB = {
     "standby": "scanning",
     "awake": "watching",
-    "excited": "bouncing",
+    "excited": "darting",
     "surveillance": "scanning",
     "alert": "alert!",
     "system_crash": "!! glitch !!",

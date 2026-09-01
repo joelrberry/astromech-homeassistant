@@ -163,13 +163,21 @@ first-run setup portal (`app/provisioning.py`), reached on demand.
 
 One always-running `servo_task` owns the PWM. Each 20 ms tick it asks the
 current mode's behaviour for a setpoint and rate-limits `pos` toward it
-(`_approach`: trapezoidal, `SERVO_MAX_ACCEL` + per-mode `SPEED_*`). Because
-`pos`/`vel` can't jump, a mode change at any instant is a smooth redirect — no
-task cancellation. Behaviours are plain state machines (`_Hold`, `_Sweep`,
-`_Wander`, `_Tremble`) built by `SERVO_BEHAVIORS[mode]`; they never touch the
-servo. `SERVO_ON_ENTER` fires one-shot side effects (system_crash → scream);
-`SERVO_MODE_TIMEOUT` auto-reverts system_crash to the prior mode after 10 s.
-No position persistence — starts at 90° every boot.
+(`_approach`: trapezoidal velocity, accel- and speed-limited, snaps on the
+final tick so it never overshoots). Because `pos`/`vel` can't jump, a mode
+change at any instant is a smooth redirect — no task cancellation. A behaviour's
+`target()` returns `(setpoint, max_speed)` or `(setpoint, max_speed,
+max_accel)` — the 3rd element lets a mode crack harder than the
+`SERVO_MAX_ACCEL` default.
+
+Behaviours (`SERVO_BEHAVIORS[mode]`, fresh instance per switch; they never touch
+the servo): `_Hold` (sleep, hologram), `_Sweep` (surveillance, alert —
+edge-to-edge oscillation), `_Wander` (standby, awake — long idle, then a slow
+move to a random spot), `_Excited` (fast ~150°/s darts to random spots, ~1.5–
+3.5 s pauses, ~40% chance of an immediate "double-take"), `_Tremble`
+(system_crash jitter). `SERVO_ON_ENTER` fires one-shot side effects
+(system_crash → scream); `SERVO_MODE_TIMEOUT` auto-reverts system_crash to the
+prior mode after 10 s. No position persistence — starts at 90° every boot.
 
 ## LEDs — `app/leds.py`
 
