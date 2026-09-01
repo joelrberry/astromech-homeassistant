@@ -104,44 +104,50 @@ class _Hold:
         return self.angle, self.speed
 
 
-class _Excited:
-    # Snappy darts to random spots with a short pause between; ~40% of the time
-    # a quick second dart ("double-take") before the longer settle. Mode:
-    # excited. Returns a 3-tuple so it can crack harder than the default accel.
-    SPEED = 150          # deg/s dart cruise
-    ACCEL = 2200         # deg/s^2 (default is 1200)
-
-    def __init__(self):
+class _Dart:
+    # Snappy darts to random spots with a pause between; `double_pct` chance of
+    # an immediate second dart ("double-take") before the next pause. Returns a
+    # 3-tuple so it can crack harder than the default accel. Modes: alert
+    # (measured), excited (frantic).
+    def __init__(self, speed, accel, wait_min, wait_max, double_pct,
+                 name="dart", min_travel=45):
+        self.speed = speed
+        self.accel = accel
+        self.wait_min = wait_min
+        self.wait_max = wait_max
+        self.double_pct = double_pct
+        self.name = name
+        self.min_travel = min_travel
         self.goal = None
         self.phase = "wait"       # wait -> dart -> [dart again] -> wait ...
         self.until = None
-        self.did_double = False
+        self.doubles = 0
 
     def target(self, now, pos):
         if self.goal is None:
             self.goal = pos
         if self.phase == "wait":
             if self.until is None:
-                self.until = time.ticks_add(now, core.rand_ms(1500, 3500))
+                self.until = time.ticks_add(
+                    now, core.rand_ms(self.wait_min, self.wait_max))
             elif time.ticks_diff(now, self.until) >= 0:
-                self.goal = _pick_target(pos, min_travel=45)
-                self.phase, self.until, self.did_double = "dart", None, False
-                core.dbg("[servo] excited dart ->", self.goal)
+                self.goal = _pick_target(pos, self.min_travel)
+                self.phase, self.until, self.doubles = "dart", None, 0
+                core.dbg("[servo]", self.name, "dart ->", self.goal)
         elif self.phase == "dart":
             if abs(pos - self.goal) < ARRIVE_EPS:
-                if not self.did_double and core.rand_between(0, 9) < 4:
-                    self.did_double = True
-                    self.goal = _pick_target(pos, min_travel=25)
-                    core.dbg("[servo] excited double-take ->", self.goal)
+                if self.doubles < 2 and core.rand_between(0, 99) < self.double_pct:
+                    self.doubles += 1
+                    self.goal = _pick_target(pos, 22)
+                    core.dbg("[servo]", self.name, "double-take ->", self.goal)
                 else:
                     self.phase, self.until = "wait", None
-        return self.goal, self.SPEED, self.ACCEL
+        return self.goal, self.speed, self.accel
 
 
 class _Sweep:
     # Oscillate lo<->hi forever at a fixed speed. Flips a hair before the end
-    # so the turnaround rounds off instead of stopping dead. Modes:
-    # surveillance, alert.
+    # so the turnaround rounds off instead of stopping dead. Mode: surveillance.
     def __init__(self, lo, hi, speed):
         self.lo = lo
         self.hi = hi
@@ -243,9 +249,10 @@ SERVO_BEHAVIORS = {  # mode -> zero-arg factory (fresh state machine per switch)
     "standby": lambda: _Wander(180000, 300000, SPEED_WANDER,
                                hold_ms=5000, suspend_ms=4000, home=90),
     "awake": lambda: _Wander(120000, 300000, SPEED_WANDER),
-    "excited": lambda: _Excited(),
+    # alert = the measured dart-and-pause; excited = a faster, twitchier version
+    "excited": lambda: _Dart(260, 3400, 500, 1400, 70, name="excited", min_travel=30),
     "surveillance": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_SURVEIL),
-    "alert": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_ALERT),
+    "alert": lambda: _Dart(150, 2200, 1500, 3500, 40, name="alert"),
     "sleep": lambda: _Hold(90),
     "hologram": lambda: _Hold(90),
     "system_crash": lambda: _Tremble(145, 6, SPEED_TREMBLE),

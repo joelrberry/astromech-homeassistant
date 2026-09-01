@@ -171,11 +171,11 @@ max_accel)` — the 3rd element lets a mode crack harder than the
 `SERVO_MAX_ACCEL` default.
 
 Behaviours (`SERVO_BEHAVIORS[mode]`, fresh instance per switch; they never touch
-the servo): `_Hold` (sleep, hologram), `_Sweep` (surveillance, alert —
-edge-to-edge oscillation), `_Wander` (standby, awake — long idle, then a slow
-move to a random spot), `_Excited` (fast ~150°/s darts to random spots, ~1.5–
-3.5 s pauses, ~40% chance of an immediate "double-take"), `_Tremble`
-(system_crash jitter). `SERVO_ON_ENTER` fires one-shot side effects
+the servo): `_Hold` (sleep, hologram), `_Sweep` (surveillance — edge-to-edge
+oscillation), `_Wander` (standby, awake — long idle, then a slow move to a
+random spot), `_Dart` (alert ≈ measured 150°/s darts with 1.5–3.5 s pauses;
+excited ≈ frantic 260°/s with 0.5–1.4 s pauses and frequent "double-takes" —
+same class, different params), `_Tremble` (system_crash jitter). `SERVO_ON_ENTER` fires one-shot side effects
 (system_crash → scream); `SERVO_MODE_TIMEOUT` auto-reverts system_crash to the
 prior mode after 10 s. No position persistence — starts at 90° every boot.
 
