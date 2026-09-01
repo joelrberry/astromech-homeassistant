@@ -29,7 +29,8 @@ sound for a clip), with a piezo buzzer for feedback. WiFi + **Home Assistant**
 
 Plain ESP32 devkit · one dome servo (GPIO18) · DFPlayer Mini + speaker
 (GPIO16/17, BUSY GPIO4) · 4× WS2812 dome lights (GPIO5, via a `74AHCT1G125`
-level shifter) · 3 buttons (GPIO32/33/25, pin↔GND) · piezo buzzer (GPIO27) · a shared **5 V, 3 A+**
+level shifter) · 3 buttons (GPIO32/33/25, pin↔GND) · piezo buzzer (GPIO27) ·
+optional SSD1306 OLED (I2C, GPIO21/22) · a shared **5 V, 3 A+**
 rail everything hangs off directly. The
 [carrier PCB](hardware/droidrefit-pcb/DESIGN.md) (100×70 mm, USB-C in,
 JLCPCB-assembled) makes that permanent; a breadboard works for bench work if
@@ -89,6 +90,9 @@ app runs. Detail in [docs/firmware.md](docs/firmware.md).
   driver written for this project; the frame/checksum protocol is per the
   DFPlayer Mini datasheet and the widely-published community command tables,
   not copied from a specific library.
+- **`droidrefit/lib/ssd1306.py`** — vendored from
+  [micropython-lib](https://github.com/micropython/micropython-lib/blob/master/micropython/drivers/display/ssd1306/ssd1306.py)
+  (MIT), SPI variant trimmed off.
 - **[MicroPython](https://micropython.org/)** (MIT) — the runtime.
 - The earlier CyberBrick chapter leaned on CyberBrick's own `/bbl` driver
   library — see [docs/cyberbrick-origins.md](docs/cyberbrick-origins.md#acknowledgments).

@@ -3,7 +3,7 @@
 # writes /config.json and reboots into normal operation.
 #
 # No app framework here — this runs before app.main starts the async loop.
-# deps: app.config
+# deps: app.config, app.oled (leaf; safe — no core dependency)
 
 import time
 import machine
@@ -21,6 +21,25 @@ except ImportError:                      # pragma: no cover
 from app import config
 
 AP_IP = "192.168.4.1"
+
+
+def _oled_show(title, lines):
+    """Best-effort — draw a few lines on the OLED if one is fitted. Never raises."""
+    try:
+        from app import oled
+        d = oled.open()
+        if d is None:
+            return
+        d.fill(0)
+        d.text(title[:16], 0, 0)
+        d.hline(0, 11, 128, 1)
+        y = 18
+        for ln in lines:
+            d.text(str(ln)[:16], 0, y)
+            y += 12
+        d.show()
+    except Exception:
+        pass
 
 # Paths various OSes probe to detect a captive portal — 302 them all to the form
 # so the "Sign in to network" sheet pops up automatically.
@@ -250,6 +269,7 @@ def _do_save(conn, device_id, ssids, form):
         return
     print("[setup] saved config for SSID %r, name %r — rebooting" % (ssid, name))
     _send(conn, 200, "text/html", _saved_page(name))
+    _oled_show("Saved", ("restarting...", "joining " + ssid[:8]))
     time.sleep(2)
     machine.reset()
 
@@ -322,6 +342,8 @@ def run(device_id):
     print("[setup] captive portal up")
     print("[setup]   join WiFi:  %s   password: %s" % (ssid, password))
     print("[setup]   then open:  http://%s/" % AP_IP)
+    _oled_show("WiFi setup", ("join  " + ssid, "pass  " + password,
+                              "open  " + AP_IP))
 
     dns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dns.setblocking(False)

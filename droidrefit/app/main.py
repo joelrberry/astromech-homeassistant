@@ -29,7 +29,7 @@ except OSError:
 from app import core
 core.init(cfg)
 
-from app import hw, sound, servo, leds, diag, ota, control, net, buttons
+from app import hw, sound, servo, leds, diag, ota, control, net, buttons, display
 
 diag.log_boot()   # reset cause + free heap, first line after config
 
@@ -105,6 +105,7 @@ async def main():
         core.supervise("busy_monitor_task", sound.busy_monitor_task),
         core.supervise("button_task", buttons.button_task),
         core.supervise("reset_button_task", reset_button_task),
+        core.supervise("display_task", display.display_task),
         core.supervise("log_task", core.log_task),
     ]
     if mqtt:

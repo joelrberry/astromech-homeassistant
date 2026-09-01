@@ -25,6 +25,7 @@ is an external 5 V rail everything hangs off directly; the
 | NeoPixel data | `GPIO5` | 4 pixels; via a `74AHCT1G125` 3.3→5 V shifter on the PCB (often fine direct on a short bench run). Skipped entirely when `leds_enabled` is false |
 | Button: mode ▲ / mode ▼ / sound | `GPIO32` / `GPIO33` / `GPIO25` | each pin↔GND, internal pull-up, active-low. PCB header `J_BTN` |
 | Piezo buzzer | `GPIO27` | `machine.PWM`; pin↔piezo↔GND. Skipped when `buzzer_enabled` is false |
+| OLED (SSD1306 128×64) | `GPIO21` SDA / `GPIO22` SCL | I2C0 @ 400 kHz, addr 0x3C/0x3D. Auto-detected — absent = no display task. VCC off **3V3** |
 | Factory-reset | `GPIO0` | the devkit BOOT button, held ~10 s while running |
 
 Power: **5 V, 3 A+** into the rail. Servo, DFPlayer and pixels wire straight to
@@ -76,9 +77,10 @@ in it to auto-connect.
 hw, core, config, version   leaves
 sound  -> core, hw           servo -> core, sound, hw     leds -> core, hw
 diag   -> core               ota   -> core, version      fx -> core, hw
+oled   -> (machine, lib/ssd1306)      display -> core, oled
 control -> core, sound, servo         buttons -> core, hw, control, fx
 net    -> core, sound, servo, diag, ota, control
-provisioning -> config, core          main -> everything
+provisioning -> config, oled          main -> everything
 ```
 
 Shared state lives in `core` (`state`, `servo_state`, `conn`, `link_state`,
@@ -187,6 +189,15 @@ short tracks), so the UI can un-light the button.
 
 SD-card layout, how to add clips, and what the DFPlayer serial protocol can and
 can't do: **[dfplayer.md](dfplayer.md)**.
+
+## Display — `app/display.py`
+
+Optional SSD1306 128×64 OLED on I2C0 (`GPIO21`/`22`). `app/oled.py` (`machine` +
+vendored `lib/ssd1306.py` — no `core` dep, so `provisioning` can use it too)
+scans the bus at startup; no panel → `display_task` idles, everything else runs
+unchanged. When present it shows device name / current mode / a volume bar /
+now-playing / the network line, redrawing on change. The setup **portal** draws
+the AP name, password and URL on the same screen.
 
 ## Diagnostics — `app/diag.py`
 

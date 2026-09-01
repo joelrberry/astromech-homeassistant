@@ -34,7 +34,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "droidrefit
 # app modules imported on the device as the post-copy integrity check
 _VERIFY = ("app.config", "app.core", "app.hw", "app.version", "app.diag",
            "app.sound", "app.servo", "app.leds", "app.ota", "app.fx",
-           "app.control", "app.net", "app.buttons", "app.provisioning")
+           "app.oled", "app.display", "app.control", "app.net", "app.buttons",
+           "app.provisioning")
 
 # device-side: SHA-256 of a file, printed with a prefix so we can pick it out
 # of any REPL banner noise. One line, no compound statements — safest for
@@ -131,6 +132,7 @@ def _file_list():
     for f in sorted(x for x in os.listdir(app_dir) if x.endswith(".py")):
         pairs.append((os.path.join(app_dir, f), ":app/" + f))
     pairs.append((os.path.join(ROOT, "lib", "dfplayer.py"), ":lib/dfplayer.py"))
+    pairs.append((os.path.join(ROOT, "lib", "ssd1306.py"), ":lib/ssd1306.py"))
     pairs.append((os.path.join(ROOT, "lib", "umqtt", "simple.py"),
                   ":lib/umqtt/simple.py"))
     pairs.append((os.path.join(ROOT, "boot.py"), ":boot.py"))

@@ -12,12 +12,15 @@
     ["app/leds.py",         "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/leds.py"],
     ["app/ota.py",          "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/ota.py"],
     ["app/fx.py",           "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/fx.py"],
+    ["app/oled.py",         "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/oled.py"],
+    ["app/display.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/display.py"],
     ["app/net.py",          "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/net.py"],
     ["app/control.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/control.py"],
     ["app/buttons.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/buttons.py"],
     ["app/provisioning.py", "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/provisioning.py"],
     ["app/main.py",         "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/app/main.py"],
     ["lib/dfplayer.py",     "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/lib/dfplayer.py"],
+    ["lib/ssd1306.py",      "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/lib/ssd1306.py"],
     ["lib/umqtt/simple.py", "https://raw.githubusercontent.com/joelrberry/astromech-homeassistant/main/droidrefit/lib/umqtt/simple.py"]
   ]
 }
