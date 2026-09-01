@@ -21,6 +21,7 @@ sound for a clip), with a piezo buzzer for feedback. WiFi + **Home Assistant**
 | [`tools/deploy.py`](tools/deploy.py) | one-command host→board sync (`mpremote`), also the initial-load tool |
 | [`hardware/droidrefit-pcb/`](hardware/droidrefit-pcb/) | KiCad carrier board — sockets the ESP32 devkit + DFPlayer, one 5 V rail, USB-C in. [DESIGN.md](hardware/droidrefit-pcb/DESIGN.md) |
 | [`docs/firmware.md`](docs/firmware.md) | **the firmware reference** — architecture, boot flow, control surfaces, OTA, recovery |
+| [`docs/dfplayer.md`](docs/dfplayer.md) | DFPlayer Mini — SD-card layout, adding sound clips, the serial protocol |
 | [`docs/cyberbrick-origins.md`](docs/cyberbrick-origins.md) | the original CyberBrick writeup (retired board, but the LED/MQTT approach carried forward) |
 | [`docs/project-notes.md`](docs/project-notes.md) | running history — decisions, bugs found and fixed |
 

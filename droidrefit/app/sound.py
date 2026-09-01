@@ -1,6 +1,8 @@
 # DFPlayer sound: the folder library, the player object, and the BUSY-pin
 # playback-finished watcher.
 #
+# SD-card layout, adding clips, and the DFPlayer protocol: docs/dfplayer.md
+#
 # deps: app.core, app.hw, dfplayer (lib)
 
 import urandom

@@ -180,10 +180,13 @@ Starter patterns — tune on real pixels.
 
 ## Sound — `app/sound.py`
 
-`SOUND_FOLDERS` maps a category to `(folder, count)`; a trigger plays a random
-track in that folder. `busy_monitor_task` watches BUSY to clear
-`state["sound"]` when playback ends (with a ~2 s fallback for very short
-tracks), so the UI can un-light the button.
+`SOUND_FOLDERS` maps a category to `(folder, count)` (counts hard-coded); a
+trigger plays a random track in that folder. `busy_monitor_task` watches BUSY
+to clear `state["sound"]` when playback ends (with a ~2 s fallback for very
+short tracks), so the UI can un-light the button.
+
+SD-card layout, how to add clips, and what the DFPlayer serial protocol can and
+can't do: **[dfplayer.md](dfplayer.md)**.
 
 ## Diagnostics — `app/diag.py`
 

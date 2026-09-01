@@ -10,6 +10,8 @@
 # Frame layout: 0x7E (start) | 0xFF (version) | 0x06 (length) | cmd |
 # feedback | param1 | param2 | checksum_hi | checksum_lo | 0xEF (end)
 # checksum = two's-complement (16-bit) of the sum of version..param2.
+#
+# Command table, query commands, clone-chip caveats: docs/dfplayer.md
 
 import time
 
