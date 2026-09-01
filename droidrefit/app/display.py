@@ -1,6 +1,7 @@
 # OLED status screen. Auto-detects an SSD1306 on the I2C bus (app.oled); if
-# there's none, display_task just idles. Renders device name / mode / volume
-# bar / now-playing / network line, redrawing only on change.
+# there's none, display_task just idles. Renders device name / mode / a status
+# line (now-playing, or what the head is doing) / volume bar / network line,
+# redrawing only on change.
 #
 # deps: app.core, app.oled
 
@@ -14,8 +15,19 @@ except ImportError:
 
 from app import core, oled
 
-_REFRESH_MS = 500
+_REFRESH_MS = 400
 _FORCE_MS = 5000
+
+# what the head is doing while the servo is actively moving, per mode
+_VERB = {
+    "standby": "scanning",
+    "awake": "watching",
+    "excited": "bouncing",
+    "surveillance": "scanning",
+    "alert": "alert!",
+    "system_crash": "!! glitch !!",
+    # sleep / hologram hold still — no verb
+}
 
 _wlan = None
 
@@ -31,22 +43,31 @@ def _net_line():
             return "net  " + _wlan.ifconfig()[0]
         return "net  offline"
     except Exception:
-        return "net  ?"
+        return "net  offline"
 
 
-def _render(d, name, mode, vol, playing_label, net_line):
+def _status_line(mode, sound, moving):
+    if sound != core.SOUND_STATE_IDLE:
+        return ">" + sound
+    if moving:
+        v = _VERB.get(mode)
+        if v:
+            return v + "..."
+    return ""
+
+
+def _render(d, name, mode, vol, status, net_line):
     d.fill(0)
     d.text(name[:16], 0, 0)
     d.hline(0, 11, 128, 1)
     d.text(mode[:16], 0, 18)
-    d.text("VOL", 0, 32)
-    d.rect(34, 31, 92, 9, 1)
+    d.text(status[:15], 6, 28)
+    d.text("VOL", 0, 40)
+    d.rect(34, 39, 92, 9, 1)
     w = (88 * max(0, min(30, vol))) // 30
     if w:
-        d.fill_rect(36, 33, w, 5, 1)
-    if playing_label:
-        d.text((">" + playing_label)[:16], 0, 44)
-    d.text(net_line[:16], 0, 56)
+        d.fill_rect(36, 41, w, 5, 1)
+    d.text(net_line[:16], 0, 54)
     d.show()
 
 
@@ -65,15 +86,15 @@ async def display_task():
         name = core.cfg.get("device_name") or "droidrefit"
         mode = core.state["mode"]
         vol = core.state["volume"]
-        snd = core.state["sound"]
-        playing = "" if snd == core.SOUND_STATE_IDLE else snd
+        status = _status_line(mode, core.state["sound"],
+                              core.servo_state.get("moving"))
         net_line = _net_line()
 
-        cur = (name, mode, vol, playing, net_line)
+        cur = (name, mode, vol, status, net_line)
         now = time.ticks_ms()
         if cur != last or time.ticks_diff(now, last_draw) > _FORCE_MS:
             try:
-                _render(d, name, mode, vol, playing, net_line)
+                _render(d, name, mode, vol, status, net_line)
             except Exception as e:
                 core.dbg("[display] render failed:", e)
             last = cur

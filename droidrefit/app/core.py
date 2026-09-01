@@ -31,7 +31,7 @@ LOG_TOPIC = b'r2d2/log'
 # conn / link_state — the current MQTTClient (swapped whole on reconnect) + health
 state = {"mode": DEFAULT_MODE, "sound": SOUND_STATE_IDLE,
          "volume": DEFAULT_VOLUME, "debug": False}
-servo_state = {"angle": 90}
+servo_state = {"angle": 90, "moving": False}
 conn = {"client": None}
 link_state = {"down": False}
 

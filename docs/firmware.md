@@ -195,9 +195,12 @@ can't do: **[dfplayer.md](dfplayer.md)**.
 Optional SSD1306 128×64 OLED on I2C0 (`GPIO21`/`22`). `app/oled.py` (`machine` +
 vendored `lib/ssd1306.py` — no `core` dep, so `provisioning` can use it too)
 scans the bus at startup; no panel → `display_task` idles, everything else runs
-unchanged. When present it shows device name / current mode / a volume bar /
-now-playing / the network line, redrawing on change. The setup **portal** draws
-the AP name, password and URL on the same screen.
+unchanged. When present it shows device name / current mode / a status line /
+volume bar / network line, redrawing on change. The status line shows the
+playing sound (`>chat`) or, while the servo is actively moving,
+`scanning… / watching… / …` per mode (`servo_task` writes
+`core.servo_state["moving"]`). The setup **portal** draws the AP name, password
+and URL on the same screen.
 
 ## Diagnostics — `app/diag.py`
 

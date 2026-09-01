@@ -268,4 +268,5 @@ async def servo_task():
         pos = _clamp(pos, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE)
         servo.duty_u16(angle_to_duty_u16(pos))
         core.servo_state["angle"] = pos
+        core.servo_state["moving"] = abs(vel) > 0.5   # deg/s — "visibly moving"
         await uasyncio.sleep_ms(TICK_MS)
