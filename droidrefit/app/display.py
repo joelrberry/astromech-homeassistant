@@ -77,6 +77,7 @@ async def _run(d):
     core.log_always("[display] SSD1306 up")
     last = None
     last_draw = time.ticks_ms()
+    fails = 0
     while True:
         try:
             name = core.cfg.get("device_name") or "droidrefit"
@@ -91,7 +92,27 @@ async def _run(d):
                 _render(d, name, mode, vol, status, net_line)
                 last = cur
                 last_draw = now
+            fails = 0
         except Exception as e:
+            # A wedged I2C bus (stuck low, usually missing pull-ups) makes every
+            # d.show() time out — and ESP-IDF's C driver prints its own error
+            # each time. Stop hammering it: after a few fails, pause and try a
+            # fresh oled.open() every 30 s until it comes back.
+            fails += 1
+            if fails == 3:
+                core.log_always("[display] I2C not responding — paused, will retry")
+            if fails >= 3:
+                await uasyncio.sleep_ms(30000)
+                try:
+                    nd = oled.open()
+                except Exception:
+                    nd = None
+                if nd is not None:
+                    d = nd
+                    last = None
+                    fails = 0
+                    core.log_always("[display] I2C recovered")
+                continue
             core.dbg("[display] loop error:", e)
         await uasyncio.sleep_ms(_REFRESH_MS)
 
