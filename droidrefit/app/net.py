@@ -323,8 +323,8 @@ def publish_discovery(client):
         "manufacturer": "CyberBrick (custom firmware)",
     }
 
-    def emit(disc_topic, payload):
-        payload["device"] = device_info
+    def emit(disc_topic, payload, device=None):
+        payload["device"] = device or device_info
         payload["unique_id"] = PREFIX + "_" + payload["unique_id"]
         client.publish(disc_topic, ujson.dumps(payload).encode(), retain=True)
 
@@ -418,29 +418,34 @@ def publish_discovery(client):
         "entity_category": "diagnostic",
     })
 
-    # --- mood tuning: a number per applicable knob + a reset button per mood,
-    #     all in HA's collapsed Configuration section ---
+    # --- mood tuning: one sub-device per mood (linked to the droid via
+    #     `via_device`) so Home Assistant auto-generates a separate card per
+    #     mood — a number per applicable knob + a reset button ---
     for m in sorted(_TUNE_KNOBS):
         title = _title(m)
+        mood_dev = {
+            "identifiers": ["%s_%s" % (PREFIX, m)],
+            "name": "%s %s" % (core.cfg["device_name"], title),
+            "manufacturer": "CyberBrick (custom firmware)",
+            "via_device": PREFIX,
+        }
         for k in _TUNE_KNOBS[m]:
             lo, hi, step, _dflt, lbl = _KNOB_SPEC[k]
             emit(_disc('number', 'tune_%s_%s' % (m, k)), {
-                "name": "%s %s" % (title, lbl),
+                "name": lbl,
                 "unique_id": "tune_%s_%s" % (m, k),
                 "min": lo, "max": hi, "step": step, "mode": "slider",
                 "state_topic": _tune_topic(m, k).decode(),
                 "command_topic": (_tune_topic(m, k) + b'/set').decode(),
-                "entity_category": "config",
                 "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
-            })
+            }, device=mood_dev)
         emit(_disc('button', 'tune_%s_reset' % m), {
-            "name": "%s Reset" % title,
+            "name": "Reset",
             "unique_id": "tune_%s_reset" % m,
             "command_topic": (_TUNE_PREFIX + m.encode() + b'/reset').decode(),
             "payload_press": "reset",
-            "entity_category": "config",
             "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
-        })
+        }, device=mood_dev)
 
     for topic in MQTT_ORPHANED_DISCOVERY_TOPICS:
         client.publish(topic, b'', retain=True)

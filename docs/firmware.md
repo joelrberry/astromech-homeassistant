@@ -148,7 +148,7 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
 | Diagnostics (sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
-| Mood tuning (numbers + reset buttons, `entity_category: config`) | `<prefix>/tune/<mood>/<knob>/set`, `<prefix>/tune/<mood>/reset` (`reset`) | `<prefix>/tune/<mood>/<knob>` (retained) |
+| Mood tuning (numbers + reset button, one HA sub-device per mood) | `<prefix>/tune/<mood>/<knob>/set`, `<prefix>/tune/<mood>/reset` (`reset`) | `<prefix>/tune/<mood>/<knob>` (retained) |
 
 `<prefix>/log` carries `log_always()` output (queued and drained one line per
 ~20 ms so bursts don't truncate on the socket). Availability is re-asserted
@@ -162,11 +162,13 @@ first-run setup portal (`app/provisioning.py`), reached on demand.
 
 ### Tuning moods from Home Assistant
 
-A curated set of per-mood knobs shows up under HA's collapsed **Configuration**
-section — enough to reshape a mood without a reflash, not the full parameter
-surface. Changes take effect **within one behaviour tick** (`core.tune_gen` is
-bumped; `servo_task` / `led_task` rebuild the current behaviour) and are
-**persisted** to `config.json`, so they survive a reboot.
+A curated set of per-mood knobs — enough to reshape a mood without a reflash,
+not the full parameter surface. Each mood is published as its **own HA
+sub-device** (`"<droid> <Mood>"`, linked to the droid via `via_device`), so HA
+auto-generates a **separate card per mood**. Changes take effect **within one
+behaviour tick** (`core.tune_gen` is bumped; `servo_task` / `led_task` rebuild
+the current behaviour) and are **persisted** to `config.json`, so they survive a
+reboot.
 
 | Knob | Range (stock) | Effect |
 |---|---|---|
