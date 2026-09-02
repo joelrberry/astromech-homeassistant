@@ -102,16 +102,36 @@ def sync_time():
 # drains the queue one line per ~20ms with an await between publishes, so a
 # burst of adjacent log calls in one scheduler slice can't interleave and
 # truncate on umqtt.simple's socket (the "ander: idle 209477ms" bug).
+#
+# Consecutive identical lines are collapsed — a stuck loop still surfaces (at
+# 8x, 16x, 32x, ... then a "repeated Nx" summary when it finally stops) but
+# can't flood the serial console or MQTT.
 _LOGQ_MAX = 40
 _logq = []
+_dup_msg = None
+_dup_n = 0
 
 
-def log_always(*args):
-    line = '[%s] %s' % (timestamp(), ' '.join(str(a) for a in args))
+def _emit(line):
     print(line)
     _logq.append(line)
     if len(_logq) > _LOGQ_MAX:
         _logq.pop(0)  # drop oldest — console still has it; keep recent for MQTT
+
+
+def log_always(*args):
+    global _dup_msg, _dup_n
+    msg = ' '.join(str(a) for a in args)
+    if msg == _dup_msg:
+        _dup_n += 1
+        if (_dup_n & (_dup_n - 1)) == 0 and _dup_n >= 8:   # 8, 16, 32, ...
+            _emit('[%s] %s  (x%d)' % (timestamp(), msg, _dup_n))
+        return
+    if _dup_n > 1:
+        _emit('[%s] (last line repeated %dx)' % (timestamp(), _dup_n))
+    _dup_msg = msg
+    _dup_n = 1
+    _emit('[%s] %s' % (timestamp(), msg))
 
 
 def dbg(*args):

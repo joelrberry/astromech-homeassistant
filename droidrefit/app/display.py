@@ -73,22 +73,7 @@ def _render(d, name, mode, vol, status, net_line):
     d.show()
 
 
-async def display_task():
-    d = None
-    for _ in range(4):                 # a panel can be slow to wake at power-on
-        try:
-            d = oled.open()
-        except Exception:
-            d = None
-        if d is not None:
-            break
-        await uasyncio.sleep_ms(2000)
-    if d is None:
-        core.log_always("[display] no SSD1306 on I2C %d/%d — display off"
-                        % (oled.SDA_PIN, oled.SCL_PIN))
-        while True:                     # one line, then quiet forever
-            await uasyncio.sleep_ms(3600000)
-
+async def _run(d):
     core.log_always("[display] SSD1306 up")
     last = None
     last_draw = time.ticks_ms()
@@ -109,3 +94,27 @@ async def display_task():
         except Exception as e:
             core.dbg("[display] loop error:", e)
         await uasyncio.sleep_ms(_REFRESH_MS)
+
+
+async def display_task():
+    # Never returns — a display fault must not make supervise re-spawn us in a
+    # loop. Any failure -> log once, then idle forever.
+    try:
+        d = None
+        for _ in range(4):             # a panel can be slow to wake at power-on
+            try:
+                d = oled.open()
+            except Exception:
+                d = None
+            if d is not None:
+                break
+            await uasyncio.sleep_ms(2000)
+        if d is not None:
+            await _run(d)               # only returns on an unexpected error
+        else:
+            core.log_always("[display] no SSD1306 on I2C %d/%d — display off"
+                            % (oled.SDA_PIN, oled.SCL_PIN))
+    except Exception as e:
+        core.log_always("[display] task stopped:", e)
+    while True:
+        await uasyncio.sleep_ms(3600000)
