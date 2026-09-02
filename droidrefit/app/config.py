@@ -81,6 +81,11 @@ def _normalise(d):
         for k in _DEFAULTS:
             if d.get(k) is not None:
                 cfg[k] = d[k]
+        # HA mood-tuning overrides (tune_<mood>_<knob>) aren't in _DEFAULTS —
+        # carry them through as-is. An absent key means "use the firmware value".
+        for k in d:
+            if k.startswith("tune_") and d[k] is not None:
+                cfg[k] = d[k]
     if not cfg["device_id"]:
         cfg["device_id"] = device_id()
     # topic_prefix is the per-droid MQTT identity: it's the MQTT client id, the
@@ -162,11 +167,7 @@ def load():
     return _normalise(raw or {})
 
 
-def save(updates):
-    """Merge `updates` into the current config, normalise, atomically write."""
-    current = _read_json() or {}
-    current.update(updates)
-    cfg = _normalise(current)
+def _atomic_write(cfg):
     tmp = CONFIG_PATH + ".tmp"
     with open(tmp, "w") as f:
         json.dump(cfg, f)
@@ -175,6 +176,24 @@ def save(updates):
     except OSError:
         pass
     os.rename(tmp, CONFIG_PATH)
+
+
+def save(updates):
+    """Merge `updates` into the current config, normalise, atomically write."""
+    current = _read_json() or {}
+    current.update(updates)
+    cfg = _normalise(current)
+    _atomic_write(cfg)
+    return cfg
+
+
+def forget(prefix):
+    """Drop every stored key starting with `prefix` (e.g. 'tune_excited_'),
+    reverting those to firmware defaults. Returns the new config."""
+    current = _read_json() or {}
+    kept = {k: v for k, v in current.items() if not k.startswith(prefix)}
+    cfg = _normalise(kept)
+    _atomic_write(cfg)
     return cfg
 
 

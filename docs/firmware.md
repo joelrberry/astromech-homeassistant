@@ -148,6 +148,7 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
 | Diagnostics (sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
+| Mood tuning (numbers + reset buttons, `entity_category: config`) | `<prefix>/tune/<mood>/<knob>/set`, `<prefix>/tune/<mood>/reset` (`reset`) | `<prefix>/tune/<mood>/<knob>` (retained) |
 
 `<prefix>/log` carries `log_always()` output (queued and drained one line per
 ~20 ms so bursts don't truncate on the socket). Availability is re-asserted
@@ -158,6 +159,28 @@ MQTT commands land via `control.apply_*` — same path as the buttons.
 There is **no always-on web control panel** — it was removed (its accept loop
 wedged after WiFi blips and leaked sockets). The only web surface is the
 first-run setup portal (`app/provisioning.py`), reached on demand.
+
+### Tuning moods from Home Assistant
+
+A curated set of per-mood knobs shows up under HA's collapsed **Configuration**
+section — enough to reshape a mood without a reflash, not the full parameter
+surface. Changes take effect **within one behaviour tick** (`core.tune_gen` is
+bumped; `servo_task` / `led_task` rebuild the current behaviour) and are
+**persisted** to `config.json`, so they survive a reboot.
+
+| Knob | Range (stock) | Effect |
+|---|---|---|
+| Speed | 0–100 (50) | multiplies the mood's cruise speed by `knob/50`, clamped to 15–300 °/s |
+| Restlessness | 0–100 (50) | scales `_Wander`/`_Dart` wait times by `50/knob` (higher = twitchier), floored at 200/400 ms |
+| LED Bright | 0–200 (100) | multiplies every pixel's brightness for that mood by `knob/100`, clamped to 0–1 |
+
+Which knobs each mood gets depends on its behaviour class: `_Wander` /
+`_Dart` moods (standby, awake, excited, alert) get all three; `_Sweep`
+(surveillance) and `_Tremble` (system_crash) get Speed + LED Bright; `_Hold`
+(sleep, hologram) gets LED Bright only. An **`<mood> Reset`** button drops that
+mood's stored knobs (`config.forget("tune_<mood>_")`) — an absent key just means
+"use the firmware value", so reset is exact and leaves other moods untouched.
+`mosquitto_sub -t '<prefix>/tune/#'` shows the retained current values.
 
 ## Servo — `app/servo.py`
 

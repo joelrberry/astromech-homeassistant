@@ -1,14 +1,14 @@
 # WiFi + MQTT + Home Assistant discovery. Optional layer — only runs when
 # core.cfg["network_enabled"]. Commands land via app.control.
 #
-# deps: app.core, app.sound, app.servo, app.diag, app.ota, app.control
+# deps: app.core, app.sound, app.servo, app.diag, app.ota, app.control, app.config
 
 import network
 import ujson
 import uasyncio
 
 from umqtt.simple import MQTTClient
-from app import core, sound, servo, diag, ota, control
+from app import core, sound, servo, diag, ota, control, config
 
 # ---- MQTT topics ----
 # Every topic, HA unique_id and HA device id is prefixed with this droid's
@@ -42,6 +42,34 @@ MQTT_RESET_CAUSE_TOPIC = _P + b'/diag/reset'
 # Firmware update (app.ota): state JSON for HA's Update entity + a command topic.
 MQTT_OTA_STATE_TOPIC = _P + b'/ota'
 MQTT_OTA_SET_TOPIC = _P + b'/ota/set'
+
+# --- Home Assistant mood tuning ---
+# <prefix>/tune/<mood>/<knob>       retained current value
+# <prefix>/tune/<mood>/<knob>/set   command
+# <prefix>/tune/<mood>/reset        button -> revert this mood to firmware stock
+# Knobs are 0..max, mid == firmware stock; an absent config key == stock, so
+# servo/leds fall back to their hard-coded values. See servo._spd/_wait,
+# leds._reaction_for.
+_TUNE_PREFIX = _P + b'/tune/'
+_TUNE_KNOBS = {
+    "standby":      ("speed", "rest", "bright"),
+    "awake":        ("speed", "rest", "bright"),
+    "excited":      ("speed", "rest", "bright"),
+    "alert":        ("speed", "rest", "bright"),
+    "surveillance": ("speed", "bright"),
+    "system_crash": ("speed", "bright"),
+    "sleep":        ("bright",),
+    "hologram":     ("bright",),
+}
+_KNOB_SPEC = {   # knob -> (min, max, step, default, HA label)
+    "speed":  (0, 100, 5, 50, "Speed"),
+    "rest":   (0, 100, 5, 50, "Restlessness"),
+    "bright": (0, 200, 5, 100, "LED Bright"),
+}
+
+
+def _tune_topic(mood, knob):
+    return _TUNE_PREFIX + mood.encode() + b'/' + knob.encode()
 
 
 def _disc(component, obj):
@@ -100,6 +128,10 @@ def on_mqtt_message(topic, msg):
             uasyncio.create_task(ota.check())
         return
 
+    if topic.startswith(_TUNE_PREFIX):
+        _handle_tune(topic[len(_TUNE_PREFIX):], msg)
+        return
+
     core.dbg("[mqtt] message on", topic, "->", msg)
     try:
         payload = ujson.loads(msg)
@@ -113,6 +145,53 @@ def on_mqtt_message(topic, msg):
     elif topic == MQTT_SOUND_COMMAND_TOPIC:
         if not control.apply_sound(payload.get("sound")):
             core.dbg("[mqtt] unknown/missing sound in payload:", payload)
+
+
+async def _publish_tune_soon(mood, knob):
+    await uasyncio.sleep_ms(50)          # let check_msg() finish first
+    publish_tune_state(mood, knob)
+
+
+def _handle_tune(rest_topic, msg):
+    parts = rest_topic.split(b'/')      # b'excited/speed/set' | b'excited/reset'
+    if len(parts) == 2 and parts[1] == b'reset':
+        mood = parts[0].decode()
+        if mood in _TUNE_KNOBS:
+            core.cfg = config.forget("tune_%s_" % mood)
+            core.tune_gen += 1
+            core.log_always("[tune]", mood, "reset to stock")
+            uasyncio.create_task(_publish_tune_soon(mood, None))
+        return
+    if len(parts) == 3 and parts[2] == b'set':
+        mood, knob = parts[0].decode(), parts[1].decode()
+        if mood in _TUNE_KNOBS and knob in _TUNE_KNOBS[mood]:
+            lo, hi = _KNOB_SPEC[knob][0], _KNOB_SPEC[knob][1]
+            try:
+                v = max(lo, min(hi, int(float(msg.strip()))))
+            except (ValueError, TypeError):
+                return
+            core.cfg = config.save({"tune_%s_%s" % (mood, knob): v})
+            core.tune_gen += 1
+            core.log_always("[tune] %s %s = %d" % (mood, knob, v))
+            uasyncio.create_task(_publish_tune_soon(mood, knob))
+
+
+def publish_tune_state(mood=None, knob=None):
+    client = core.conn["client"]
+    if client is None:
+        return
+    moods = (mood,) if mood else _TUNE_KNOBS
+    for m in moods:
+        for k in _TUNE_KNOBS.get(m, ()):
+            if knob and k != knob:
+                continue
+            v = core.cfg.get("tune_%s_%s" % (m, k), _KNOB_SPEC[k][3])
+            try:
+                client.publish(_tune_topic(m, k), str(v).encode(), retain=True)
+            except Exception as e:
+                core.dbg("[tune] state publish failed:", e)
+                core.link_state["down"] = True
+                return
 
 
 # ---- tasks ----
@@ -334,6 +413,30 @@ def publish_discovery(client):
         "entity_category": "diagnostic",
     })
 
+    # --- mood tuning: a number per applicable knob + a reset button per mood,
+    #     all in HA's collapsed Configuration section ---
+    for m in sorted(_TUNE_KNOBS):
+        title = m.replace("_", " ").title()
+        for k in _TUNE_KNOBS[m]:
+            lo, hi, step, _dflt, lbl = _KNOB_SPEC[k]
+            emit(_disc('number', 'tune_%s_%s' % (m, k)), {
+                "name": "%s %s" % (title, lbl),
+                "unique_id": "tune_%s_%s" % (m, k),
+                "min": lo, "max": hi, "step": step, "mode": "slider",
+                "state_topic": _tune_topic(m, k).decode(),
+                "command_topic": (_tune_topic(m, k) + b'/set').decode(),
+                "entity_category": "config",
+                "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
+            })
+        emit(_disc('button', 'tune_%s_reset' % m), {
+            "name": "%s Reset" % title,
+            "unique_id": "tune_%s_reset" % m,
+            "command_topic": (_TUNE_PREFIX + m.encode() + b'/reset').decode(),
+            "payload_press": "reset",
+            "entity_category": "config",
+            "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
+        })
+
     for topic in MQTT_ORPHANED_DISCOVERY_TOPICS:
         client.publish(topic, b'', retain=True)
 
@@ -420,6 +523,7 @@ async def establish_link():
     client.subscribe(MQTT_SOUND_COMMAND_TOPIC)
     client.subscribe(MQTT_VOLUME_SET_TOPIC)
     client.subscribe(MQTT_DIAG_SET_TOPIC)
+    client.subscribe(_TUNE_PREFIX + b'#')
     if ota.enabled():
         client.subscribe(MQTT_OTA_SET_TOPIC)
     core.conn["client"] = client
@@ -428,6 +532,7 @@ async def establish_link():
     client.publish(MQTT_AVAILABILITY_TOPIC, b'online', retain=True)
     client.publish(MQTT_RESET_CAUSE_TOPIC, diag.RESET_CAUSE.encode(), retain=True)
     publish_discovery(client)
+    publish_tune_state()
     if ota.enabled():
         ota._on_change = publish_ota_state
         publish_ota_state()

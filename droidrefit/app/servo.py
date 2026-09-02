@@ -245,17 +245,44 @@ class _Tremble:
         return self.goal, self.speed
 
 
+# --- Home Assistant mood tuning (see net.py / config.py) ---
+# tune_<mood>_speed / tune_<mood>_rest are 0..100 knobs, 50 == firmware stock;
+# absent -> stock. Applied here so a change takes effect on the next behaviour
+# rebuild (mode switch, or core.tune_gen bump).
+def _tk(mood, knob, dflt):
+    try:
+        v = core.cfg.get("tune_%s_%s" % (mood, knob))
+    except Exception:
+        v = None
+    return dflt if v is None else v
+
+
+def _spd(mood, base):
+    return max(15.0, min(300.0, base * _tk(mood, "speed", 50) / 50.0))
+
+
+def _wait(mood, lo, hi):
+    m = 50.0 / max(1, _tk(mood, "rest", 50))     # knob>50 -> shorter waits
+    return max(200, int(lo * m)), max(400, int(hi * m))
+
+
 SERVO_BEHAVIORS = {  # mode -> zero-arg factory (fresh state machine per switch)
-    "standby": lambda: _Wander(180000, 300000, SPEED_WANDER,
+    "standby": lambda: _Wander(*_wait("standby", 180000, 300000),
+                               _spd("standby", SPEED_WANDER),
                                hold_ms=5000, suspend_ms=4000, home=90),
-    "awake": lambda: _Wander(120000, 300000, SPEED_WANDER),
+    "awake": lambda: _Wander(*_wait("awake", 120000, 300000),
+                             _spd("awake", SPEED_WANDER)),
     # alert = the measured dart-and-pause; excited = a faster, twitchier version
-    "excited": lambda: _Dart(260, 3400, 500, 1400, 70, name="excited", min_travel=30),
-    "surveillance": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX, SPEED_SURVEIL),
-    "alert": lambda: _Dart(150, 2200, 1500, 3500, 40, name="alert"),
+    "excited": lambda: _Dart(_spd("excited", 260), 3400,
+                             *_wait("excited", 500, 1400), 70,
+                             name="excited", min_travel=30),
+    "surveillance": lambda: _Sweep(SWEEP_MIN, SWEEP_MAX,
+                                   _spd("surveillance", SPEED_SURVEIL)),
+    "alert": lambda: _Dart(_spd("alert", 150), 2200,
+                           *_wait("alert", 1500, 3500), 40, name="alert"),
     "sleep": lambda: _Hold(90),
     "hologram": lambda: _Hold(90),
-    "system_crash": lambda: _Tremble(145, 6, SPEED_TREMBLE),
+    "system_crash": lambda: _Tremble(145, 6, _spd("system_crash", SPEED_TREMBLE)),
 }
 
 SERVO_ON_ENTER = {  # one-shot side effects fired once when a mode is entered
@@ -273,6 +300,7 @@ async def servo_task():
     pos = float(core.servo_state["angle"])
     vel = 0.0
     last_mode = None
+    last_tune = core.tune_gen
     behavior = None
     revert_to = None   # mode to fall back to when a timed mode expires
     revert_at = None   # ticks_ms deadline, or None
@@ -286,8 +314,6 @@ async def servo_task():
                     hook()
                 except Exception as e:
                     core.dbg("[servo] on-enter hook failed:", e)
-            factory = SERVO_BEHAVIORS.get(mode, SERVO_BEHAVIORS[core.DEFAULT_MODE])
-            behavior = factory()
             timeout = SERVO_MODE_TIMEOUT.get(mode)
             if timeout is None:
                 revert_to = revert_at = None
@@ -296,6 +322,12 @@ async def servo_task():
                 revert_at = time.ticks_add(time.ticks_ms(), timeout)
                 core.dbg("[servo] %s: revert to %s in %dms" % (mode, revert_to, timeout))
             last_mode = mode
+            behavior = None                     # force a rebuild below
+
+        if behavior is None or core.tune_gen != last_tune:
+            factory = SERVO_BEHAVIORS.get(mode, SERVO_BEHAVIORS[core.DEFAULT_MODE])
+            behavior = factory()
+            last_tune = core.tune_gen
 
         if revert_at is not None and time.ticks_diff(time.ticks_ms(), revert_at) >= 0:
             core.dbg("[servo] %s expired -> %s" % (mode, revert_to))

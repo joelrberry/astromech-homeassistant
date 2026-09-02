@@ -131,6 +131,21 @@ LED_REACTIONS = {
 }
 
 
+def _reaction_for(mode):
+    # LED_REACTIONS entry for `mode`, with the HA 'tune_<mode>_bright' knob
+    # applied (0..200, 100 == as authored). Absent knob -> authored table.
+    spec = LED_REACTIONS.get(mode, LED_REACTIONS[core.DEFAULT_MODE])
+    try:
+        k = core.cfg.get("tune_%s_bright" % mode)
+    except Exception:
+        k = None
+    if k is None or k == 100:
+        return spec
+    f = k / 100.0
+    return [(p, c, c2, per, max(0.0, min(1.0, br * f)))
+            for (p, c, c2, per, br) in spec]
+
+
 def _all_off():
     if _np is None:
         return
@@ -168,16 +183,18 @@ async def led_task():
     _np = neopixel.NeoPixel(machine.Pin(hw.NEOPIXEL_PIN), _N)
     chans = [PixelChannel() for _ in range(_N)]
     last_mode = None
+    last_tune = core.tune_gen
     try:
         while True:
             mode = core.state["mode"]
-            if mode != last_mode:
-                spec = LED_REACTIONS.get(mode, LED_REACTIONS[core.DEFAULT_MODE])
+            if mode != last_mode or core.tune_gen != last_tune:
+                spec = _reaction_for(mode)
                 for i in range(_N):
                     pat, c, c2, per, br = spec[i] if i < len(spec) else ("off", OFF, OFF, 0, 0)
                     chans[i].set(pat, c, c2, per, br)
                 core.dbg("[leds] mode ->", mode)
                 last_mode = mode
+                last_tune = core.tune_gen
             now = time.ticks_ms()
             for i in range(_N):
                 _np[i] = chans[i].rgb(now)

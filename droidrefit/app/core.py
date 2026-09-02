@@ -43,6 +43,10 @@ reconnects = 0       # times connection_watchdog ran a full reconnect
 # 'WiFi Associations' diagnostic sensor (a flapping-link tell).
 net_generation = 0
 
+# bumped on any HA mood-tuning change (tune_* config keys); servo_task and
+# led_task rebuild the current behaviour when it changes.
+tune_gen = 0
+
 cfg = None          # the loaded config dict — set by init()
 _time_synced = False
 
