@@ -21,11 +21,13 @@ def open():
     write (one bounded transaction), a present one comes up immediately.
     """
     try:
+        # 100 kHz (not 400) — far more tolerant of breadboard wire capacitance
+        # and servo-lead noise; a status screen doesn't need the speed.
         try:
-            i2c = I2C(0, sda=Pin(SDA_PIN), scl=Pin(SCL_PIN), freq=400000,
+            i2c = I2C(0, sda=Pin(SDA_PIN), scl=Pin(SCL_PIN), freq=100000,
                       timeout=50000)          # 50 ms/transaction cap where supported
         except TypeError:
-            i2c = I2C(0, sda=Pin(SDA_PIN), scl=Pin(SCL_PIN), freq=400000)
+            i2c = I2C(0, sda=Pin(SDA_PIN), scl=Pin(SCL_PIN), freq=100000)
     except Exception:
         return None
     for addr in _ADDRS:
