@@ -72,6 +72,11 @@ def _tune_topic(mood, knob):
     return _TUNE_PREFIX + mood.encode() + b'/' + knob.encode()
 
 
+def _title(s):
+    # MicroPython str has no .title() — capitalise each underscore-separated word
+    return " ".join(w[:1].upper() + w[1:] for w in s.split("_"))
+
+
 def _disc(component, obj):
     return ('homeassistant/%s/%s/%s/config' % (component, PREFIX, obj)).encode()
 
@@ -416,7 +421,7 @@ def publish_discovery(client):
     # --- mood tuning: a number per applicable knob + a reset button per mood,
     #     all in HA's collapsed Configuration section ---
     for m in sorted(_TUNE_KNOBS):
-        title = m.replace("_", " ").title()
+        title = _title(m)
         for k in _TUNE_KNOBS[m]:
             lo, hi, step, _dflt, lbl = _KNOB_SPEC[k]
             emit(_disc('number', 'tune_%s_%s' % (m, k)), {
