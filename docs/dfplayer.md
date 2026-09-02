@@ -52,9 +52,17 @@ SOUND_FOLDERS = {"chat": (1, 18), "gen": (2, 19), "happy": (3, 7),
 ```
 
 `{name: (folder_number, file_count)}` — **the counts are hard-coded.** A trigger
-(button, MQTT, `system_crash`) calls `play_random_in_folder(name)`, which picks
-`track = random(1..count)` and sends **play-folder-track** (`0x0F`) with that
-`folder, track`. `busy_monitor_task` then watches BUSY to know when it finished.
+(button, MQTT, or `mood_sound_task`) calls `play_random_in_folder(name)`, which
+picks `track = random(1..count)` and sends **play-folder-track** (`0x0F`) with
+that `folder, track`. `busy_monitor_task` then watches BUSY to know when it
+finished.
+
+**Per-mood audio.** Each mood has a Home Assistant `Audio` dropdown (Off + these
+7 categories) and an `Audio Repeat (s)` slider. `sound.mood_sound_task` plays a
+random track from the selected category when the mood is entered, and every
+`audio_gap` seconds after while the mood holds — subject to BUSY, and never over
+a user-picked clip. No firmware mood→folder table: every mood ships `Off`,
+including `system_crash` (set its dropdown to `scream` for the old crash cue).
 
 ### Adding clips to a folder
 

@@ -197,6 +197,13 @@ def forget(prefix):
     return cfg
 
 
+def persist(cfg):
+    """Atomically write an already-built config dict as-is (normalised). For
+    callers that mutate the live dict in RAM and flush it later — no re-read,
+    no merge. Blocks on flash, so keep it off hot paths (see net._flush_tune)."""
+    _atomic_write(_normalise(cfg))
+
+
 def wipe():
     """Delete config.json (+ any stale tmp) — next boot enters provisioning."""
     for p in (CONFIG_PATH, CONFIG_PATH + ".tmp"):

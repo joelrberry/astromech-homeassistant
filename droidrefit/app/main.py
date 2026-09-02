@@ -103,6 +103,7 @@ async def main():
         core.supervise("servo_task", servo.servo_task),
         core.supervise("led_task", leds.led_task),
         core.supervise("busy_monitor_task", sound.busy_monitor_task),
+        core.supervise("mood_sound_task", sound.mood_sound_task),
         core.supervise("button_task", buttons.button_task),
         core.supervise("reset_button_task", reset_button_task),
         core.supervise("display_task", display.display_task),

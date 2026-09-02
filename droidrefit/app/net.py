@@ -3,6 +3,7 @@
 #
 # deps: app.core, app.sound, app.servo, app.diag, app.ota, app.control, app.config
 
+import gc
 import network
 import ujson
 import uasyncio
@@ -47,25 +48,54 @@ MQTT_OTA_SET_TOPIC = _P + b'/ota/set'
 # <prefix>/tune/<mood>/<knob>       retained current value
 # <prefix>/tune/<mood>/<knob>/set   command
 # <prefix>/tune/<mood>/reset        button -> revert this mood to firmware stock
-# Knobs are 0..max, mid == firmware stock; an absent config key == stock, so
-# servo/leds fall back to their hard-coded values. See servo._spd/_wait,
-# leds._reaction_for.
+# Number knobs are 0..max, mid == firmware stock; the `audio` knob is a select.
+# An absent config key == stock, so servo/leds/sound fall back to their
+# hard-coded values. See servo._spd/_wait/_mood_timeout_ms, leds._reaction_for,
+# sound.play_mood / mood_sound_task.
 _TUNE_PREFIX = _P + b'/tune/'
 _TUNE_KNOBS = {
-    "standby":      ("speed", "rest", "bright"),
-    "awake":        ("speed", "rest", "bright"),
-    "excited":      ("speed", "rest", "bright"),
-    "alert":        ("speed", "rest", "bright"),
-    "surveillance": ("speed", "bright"),
-    "system_crash": ("speed", "bright"),
-    "sleep":        ("bright",),
-    "hologram":     ("bright",),
+    "standby":      ("speed", "rest", "bright", "audio", "audio_gap"),
+    "awake":        ("speed", "rest", "bright", "audio", "audio_gap"),
+    "excited":      ("speed", "rest", "bright", "audio", "audio_gap", "duration"),
+    "alert":        ("speed", "rest", "bright", "audio", "audio_gap", "duration"),
+    "surveillance": ("speed", "bright", "audio", "audio_gap", "duration"),
+    "system_crash": ("speed", "bright", "audio", "audio_gap", "duration"),
+    "sleep":        ("bright", "audio", "audio_gap"),
+    "hologram":     ("bright", "audio", "audio_gap"),
 }
-_KNOB_SPEC = {   # knob -> (min, max, step, default, HA label)
-    "speed":  (0, 100, 5, 50, "Speed"),
-    "rest":   (0, 100, 5, 50, "Restlessness"),
-    "bright": (0, 200, 5, 100, "LED Bright"),
+_KNOB_SPEC = {   # number knob -> (min, max, step, default, HA label)
+    "speed":     (0, 100, 5, 50, "Speed"),
+    "rest":      (0, 100, 5, 50, "Restlessness"),
+    "bright":    (0, 200, 5, 100, "LED Bright"),
+    "audio_gap": (0, 300, 5, 0, "Audio Repeat (s)"),
+    "duration":  (0, 300, 5, 0, "Duration (s)"),
 }
+_SEL_KNOBS = {   # select knob -> (default, HA label); options built at discovery
+    "audio": ("off", "Audio"),
+}
+_V1_KNOBS = ("speed", "rest", "bright")   # knobs the first shipped version had
+# The HA card should show system_crash's stock 10 s auto-revert, not 0, when the
+# duration knob is untouched (the firmware still gets 10 s from servo).
+_KNOB_DEFAULT_OVERRIDE = {
+    ("system_crash", "duration"): 10,
+}
+
+
+def _audio_options():
+    return ["off"] + sorted(sound.SOUND_FOLDERS)
+
+
+def _knob_is_select(knob):
+    return knob in _SEL_KNOBS
+
+
+def _knob_default(mood, knob):
+    o = _KNOB_DEFAULT_OVERRIDE.get((mood, knob))
+    if o is not None:
+        return o
+    if knob in _SEL_KNOBS:
+        return _SEL_KNOBS[knob][0]
+    return _KNOB_SPEC[knob][3]
 
 
 def _tune_topic(mood, knob):
@@ -157,28 +187,64 @@ async def _publish_tune_soon(mood, knob):
     publish_tune_state(mood, knob)
 
 
+# Tune changes land here straight off the MQTT receive path. Writing config.json
+# is a multi-hundred-ms blocking flash op, so we DON'T do it per message —
+# `core.cfg` is updated in RAM (the droid reacts live via tune_gen, HA gets its
+# echo immediately) and a single write is debounced ~2 s past the last change.
+_flush_task = None
+
+
+async def _flush_tune():
+    try:
+        await uasyncio.sleep_ms(1500)   # coalesce a slider drag; short enough
+    except uasyncio.CancelledError:     # that a brownout rarely loses a change
+        return
+    try:
+        config.persist(core.cfg)
+        core.dbg("[tune] config persisted")
+    except Exception as e:
+        core.log_always("[tune] persist failed:", e)
+
+
+def _schedule_flush():
+    global _flush_task
+    if _flush_task is not None:
+        _flush_task.cancel()
+    _flush_task = uasyncio.create_task(_flush_tune())
+
+
 def _handle_tune(rest_topic, msg):
     parts = rest_topic.split(b'/')      # b'excited/speed/set' | b'excited/reset'
     if len(parts) == 2 and parts[1] == b'reset':
         mood = parts[0].decode()
         if mood in _TUNE_KNOBS:
-            core.cfg = config.forget("tune_%s_" % mood)
+            pfx = "tune_%s_" % mood
+            for k in [k for k in core.cfg if k.startswith(pfx)]:
+                del core.cfg[k]
             core.tune_gen += 1
+            _schedule_flush()
             core.log_always("[tune]", mood, "reset to stock")
             uasyncio.create_task(_publish_tune_soon(mood, None))
         return
     if len(parts) == 3 and parts[2] == b'set':
         mood, knob = parts[0].decode(), parts[1].decode()
-        if mood in _TUNE_KNOBS and knob in _TUNE_KNOBS[mood]:
+        if mood not in _TUNE_KNOBS or knob not in _TUNE_KNOBS[mood]:
+            return
+        if _knob_is_select(knob):
+            v = msg.strip().decode()
+            if knob == "audio" and v != "off" and v not in sound.SOUND_FOLDERS:
+                return
+        else:
             lo, hi = _KNOB_SPEC[knob][0], _KNOB_SPEC[knob][1]
             try:
                 v = max(lo, min(hi, int(float(msg.strip()))))
             except (ValueError, TypeError):
                 return
-            core.cfg = config.save({"tune_%s_%s" % (mood, knob): v})
-            core.tune_gen += 1
-            core.log_always("[tune] %s %s = %d" % (mood, knob, v))
-            uasyncio.create_task(_publish_tune_soon(mood, knob))
+        core.cfg["tune_%s_%s" % (mood, knob)] = v
+        core.tune_gen += 1
+        _schedule_flush()
+        core.log_always("[tune] %s %s = %s" % (mood, knob, v))
+        uasyncio.create_task(_publish_tune_soon(mood, knob))
 
 
 def publish_tune_state(mood=None, knob=None):
@@ -190,7 +256,7 @@ def publish_tune_state(mood=None, knob=None):
         for k in _TUNE_KNOBS.get(m, ()):
             if knob and k != knob:
                 continue
-            v = core.cfg.get("tune_%s_%s" % (m, k), _KNOB_SPEC[k][3])
+            v = core.cfg.get("tune_%s_%s" % (m, k), _knob_default(m, k))
             try:
                 client.publish(_tune_topic(m, k), str(v).encode(), retain=True)
             except Exception as e:
@@ -204,14 +270,19 @@ async def mqtt_task():
     while True:
         client = core.conn["client"]
         if client is not None:
-            try:
-                client.check_msg()
-            except OSError as e:
-                if e.args and e.args[0] == -1:
-                    pass  # known umqtt.simple quirk: "no message waiting"
-                else:
+            # Drain a burst per tick: after a (re)connect the broker replays
+            # every retained tune/# + command topic at once, and one message
+            # per 100 ms poll makes that backlog take many seconds to clear —
+            # long enough that a fresh slider change looks stuck.
+            for _ in range(12):
+                try:
+                    client.check_msg()
+                except OSError as e:
+                    if e.args and e.args[0] == -1:
+                        break  # known umqtt.simple quirk: "no message waiting"
                     core.dbg("[mqtt] check_msg error:", e)
                     core.link_state["down"] = True
+                    break
         await uasyncio.sleep_ms(100)
 
 
@@ -420,8 +491,19 @@ def publish_discovery(client):
 
     # --- mood tuning: one sub-device per mood (linked to the droid via
     #     `via_device`) so Home Assistant auto-generates a separate card per
-    #     mood — a number per applicable knob + a reset button ---
+    #     mood — a number/select per applicable knob + a reset button.
+    #
+    #     v1 (commit c6e3c3b) published these under the main device with
+    #     `tune_<mood>_<knob>` ids. HA won't re-home an already-registered
+    #     entity when only the discovery `device` block changes, so v2 uses
+    #     fresh `<mood>_<knob>` topic/ids and clears the v1 configs first. ---
     for m in sorted(_TUNE_KNOBS):
+        client.publish(_disc('button', 'tune_%s_reset' % m), b'', retain=True)
+        for k in _V1_KNOBS:
+            client.publish(_disc('number', 'tune_%s_%s' % (m, k)), b'', retain=True)
+
+    for m in sorted(_TUNE_KNOBS):
+        gc.collect()               # ~50 entities of transient dict/JSON here
         title = _title(m)
         mood_dev = {
             "identifiers": ["%s_%s" % (PREFIX, m)],
@@ -430,18 +512,27 @@ def publish_discovery(client):
             "via_device": PREFIX,
         }
         for k in _TUNE_KNOBS[m]:
-            lo, hi, step, _dflt, lbl = _KNOB_SPEC[k]
-            emit(_disc('number', 'tune_%s_%s' % (m, k)), {
-                "name": lbl,
-                "unique_id": "tune_%s_%s" % (m, k),
-                "min": lo, "max": hi, "step": step, "mode": "slider",
+            payload = {
+                "unique_id": "%s_%s" % (m, k),
                 "state_topic": _tune_topic(m, k).decode(),
                 "command_topic": (_tune_topic(m, k) + b'/set').decode(),
                 "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
-            }, device=mood_dev)
-        emit(_disc('button', 'tune_%s_reset' % m), {
+            }
+            if _knob_is_select(k):
+                payload["name"] = _SEL_KNOBS[k][1]
+                payload["options"] = _audio_options() if k == "audio" else ["off"]
+                emit(_disc('select', '%s_%s' % (m, k)), payload, device=mood_dev)
+            else:
+                lo, hi, step, _dflt, lbl = _KNOB_SPEC[k]
+                payload["name"] = lbl
+                payload["min"] = lo
+                payload["max"] = hi
+                payload["step"] = step
+                payload["mode"] = "slider"
+                emit(_disc('number', '%s_%s' % (m, k)), payload, device=mood_dev)
+        emit(_disc('button', '%s_reset' % m), {
             "name": "Reset",
-            "unique_id": "tune_%s_reset" % m,
+            "unique_id": "%s_reset" % m,
             "command_topic": (_TUNE_PREFIX + m.encode() + b'/reset').decode(),
             "payload_press": "reset",
             "availability_topic": MQTT_AVAILABILITY_TOPIC.decode(),
@@ -454,6 +545,11 @@ def publish_discovery(client):
 async def connect_wifi():
     # The blocking calls here (wlan.connect, ntptime.settime inside sync_time)
     # do not yield; only the retry loop's wait does.
+    # esp_wifi_init needs a contiguous block; on the classic ESP32's small
+    # fragmenting heap a reconnect can otherwise fail with esp_netif / "init
+    # nvs: failed" errors. Compact first (same reason ota.py double-collects).
+    gc.collect()
+    gc.collect()
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     try:
@@ -541,7 +637,9 @@ async def establish_link():
 
     client.publish(MQTT_AVAILABILITY_TOPIC, b'online', retain=True)
     client.publish(MQTT_RESET_CAUSE_TOPIC, diag.RESET_CAUSE.encode(), retain=True)
+    gc.collect()                    # the discovery burst allocates a lot of transient JSON
     publish_discovery(client)
+    gc.collect()
     publish_tune_state()
     if ota.enabled():
         ota._on_change = publish_ota_state

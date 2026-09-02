@@ -9,14 +9,14 @@
 # machines: target(now, pos) -> (setpoint_deg, max_speed_deg_s); recreated on
 # every mode change.
 #
-# deps: app.core, app.sound, app.hw
+# deps: app.core, app.hw
 
 import math
 import time
 import machine
 import uasyncio
 
-from app import core, sound, hw
+from app import core, hw
 
 # --- PWM signal params ---
 MIN_US = 500
@@ -229,7 +229,8 @@ class _Wander:
 
 class _Tremble:
     # Jitter around a base angle: repick base +/- jitter every ~90ms or on
-    # arrival. Mode: system_crash (the scream is a SERVO_ON_ENTER hook).
+    # arrival. Mode: system_crash (its scream, if any, comes from the HA
+    # `audio` knob via sound.mood_sound_task, not from here).
     def __init__(self, base, jitter, speed):
         self.base = base
         self.jitter = jitter
@@ -266,6 +267,28 @@ def _wait(mood, lo, hi):
     return max(200, int(lo * m)), max(400, int(hi * m))
 
 
+def _mood_timeout_ms(mode):
+    # Per-mood auto-revert. `tune_<mode>_duration` is seconds: >0 auto-reverts,
+    # 0 forces permanent, absent -> the SERVO_MODE_TIMEOUT firmware default
+    # (system_crash 10 s; everything else permanent).
+    try:
+        v = core.cfg.get("tune_%s_duration" % mode)
+    except Exception:
+        v = None
+    if v is None:
+        return SERVO_MODE_TIMEOUT.get(mode)
+    return int(v) * 1000 if v else None
+
+
+def _revert_deadline(mode, entered_at, revert_to):
+    if revert_to is None:
+        return None
+    ms = _mood_timeout_ms(mode)
+    if ms is None:
+        return None
+    return time.ticks_add(entered_at, ms)
+
+
 SERVO_BEHAVIORS = {  # mode -> zero-arg factory (fresh state machine per switch)
     "standby": lambda: _Wander(*_wait("standby", 180000, 300000),
                                _spd("standby", SPEED_WANDER),
@@ -285,15 +308,13 @@ SERVO_BEHAVIORS = {  # mode -> zero-arg factory (fresh state machine per switch)
     "system_crash": lambda: _Tremble(145, 6, _spd("system_crash", SPEED_TREMBLE)),
 }
 
-SERVO_ON_ENTER = {  # one-shot side effects fired once when a mode is entered
-    # Folder 06 = "scream" (r2d2audio.md sound table), 3 tracks — the "error" cue.
-    "system_crash": lambda: sound.player.play_folder_track(
-        6, core.rand_between(1, 3)),
-}
+SERVO_ON_ENTER = {}  # one-shot side effects fired once when a mode is entered
+                     # (kept as an extension point; the system_crash scream now
+                     # rides the HA `audio` knob via sound.mood_sound_task)
 
 SERVO_MODE_TIMEOUT = {  # mode -> ms it runs before auto-reverting to the mode
-    "system_crash": 10000,  # that was active before it (or DEFAULT_MODE at boot)
-}
+    "system_crash": 10000,  # that was active before it (or DEFAULT_MODE at boot).
+}                           # Overridden per-mood by the `tune_<mode>_duration` knob.
 
 
 async def servo_task():
@@ -302,8 +323,10 @@ async def servo_task():
     last_mode = None
     last_tune = core.tune_gen
     behavior = None
-    revert_to = None   # mode to fall back to when a timed mode expires
-    revert_at = None   # ticks_ms deadline, or None
+    entered_at = time.ticks_ms()   # when the current mode was entered
+    revert_to = None               # mode a timed mode falls back to, or None
+    revert_at = None               # ticks_ms deadline, or None
+    reverted_via_auto = False      # the mode we're in got here by auto-revert
     while True:
         mode = core.state["mode"]
         if mode != last_mode:
@@ -314,25 +337,29 @@ async def servo_task():
                     hook()
                 except Exception as e:
                     core.dbg("[servo] on-enter hook failed:", e)
-            timeout = SERVO_MODE_TIMEOUT.get(mode)
-            if timeout is None:
-                revert_to = revert_at = None
-            else:
-                revert_to = last_mode if last_mode in SERVO_BEHAVIORS else core.DEFAULT_MODE
-                revert_at = time.ticks_add(time.ticks_ms(), timeout)
-                core.dbg("[servo] %s: revert to %s in %dms" % (mode, revert_to, timeout))
+            entered_at = time.ticks_ms()
+            revert_to = last_mode if last_mode in SERVO_BEHAVIORS else core.DEFAULT_MODE
+            if reverted_via_auto or revert_to == mode:
+                revert_to = None    # landed here by auto-revert / would loop -> stay
+            reverted_via_auto = False
+            revert_at = _revert_deadline(mode, entered_at, revert_to)
+            if revert_at is not None:
+                core.dbg("[servo] %s: revert to %s" % (mode, revert_to))
             last_mode = mode
             behavior = None                     # force a rebuild below
 
         if behavior is None or core.tune_gen != last_tune:
             factory = SERVO_BEHAVIORS.get(mode, SERVO_BEHAVIORS[core.DEFAULT_MODE])
             behavior = factory()
+            if core.tune_gen != last_tune:      # a live `duration` edit may move it
+                revert_at = _revert_deadline(mode, entered_at, revert_to)
             last_tune = core.tune_gen
 
         if revert_at is not None and time.ticks_diff(time.ticks_ms(), revert_at) >= 0:
             core.dbg("[servo] %s expired -> %s" % (mode, revert_to))
             core.state["mode"] = revert_to
-            revert_to = revert_at = None
+            reverted_via_auto = True
+            revert_at = None
 
         now = time.ticks_ms()
         res = behavior.target(now, pos)

@@ -93,7 +93,8 @@ task on a crash and counts restarts (surfaced in diagnostics).
 reboots on save). Else `core.init(cfg)`, import modules, and — only when
 `cfg["network_enabled"]` — connect WiFi (+ MQTT if `mqtt_enabled`). Then
 `ota.confirm()` and gather the task set: `servo`, `led`, `busy_monitor`,
-`button`, `reset_button`, `log` always; the MQTT tasks only when networked.
+`mood_sound`, `button`, `reset_button`, `log` always; the MQTT tasks only when
+networked.
 
 ### Recovery hatches (root `/main.py`, self-contained — no `app` import)
 
@@ -148,7 +149,7 @@ MQTT auto-discovery publishes on connect. Topics are `<prefix>/…`:
 | Firmware (update) — *only if `ota_url` set* | `<prefix>/ota/set` `install` | `<prefix>/ota` |
 | Heartbeat (sensor) | — | `<prefix>/heartbeat` (60 s, `expire_after` 180) |
 | Diagnostics (sensors) | — | `<prefix>/diag` JSON + `<prefix>/diag/reset` |
-| Mood tuning (numbers + reset button, one HA sub-device per mood) | `<prefix>/tune/<mood>/<knob>/set`, `<prefix>/tune/<mood>/reset` (`reset`) | `<prefix>/tune/<mood>/<knob>` (retained) |
+| Mood tuning (numbers + `audio` select + reset button, one HA sub-device per mood) | `<prefix>/tune/<mood>/<knob>/set`, `<prefix>/tune/<mood>/reset` (`reset`) | `<prefix>/tune/<mood>/<knob>` (retained) |
 
 `<prefix>/log` carries `log_always()` output (queued and drained one line per
 ~20 ms so bursts don't truncate on the socket). Availability is re-asserted
@@ -167,22 +168,37 @@ not the full parameter surface. Each mood is published as its **own HA
 sub-device** (`"<droid> <Mood>"`, linked to the droid via `via_device`), so HA
 auto-generates a **separate card per mood**. Changes take effect **within one
 behaviour tick** (`core.tune_gen` is bumped; `servo_task` / `led_task` rebuild
-the current behaviour) and are **persisted** to `config.json`, so they survive a
-reboot.
+the current behaviour), and the new value is echoed back to HA immediately. The
+`config.json` write is **debounced ~1.5 s** past the last change — a slider drag
+is one flash write, not dozens, and the MQTT receive loop never blocks on flash
+(that stall used to flag the link down and delay the HA echo by a full
+`connection_watchdog` cycle).
 
 | Knob | Range (stock) | Effect |
 |---|---|---|
 | Speed | 0–100 (50) | multiplies the mood's cruise speed by `knob/50`, clamped to 15–300 °/s |
 | Restlessness | 0–100 (50) | scales `_Wander`/`_Dart` wait times by `50/knob` (higher = twitchier), floored at 200/400 ms |
 | LED Bright | 0–200 (100) | multiplies every pixel's brightness for that mood by `knob/100`, clamped to 0–1 |
+| Audio | select: `off` + the 7 sound categories (`off`) | a random clip from that category plays when the mood is entered — see below |
+| Audio Repeat (s) | 0–300 (0) | 0 = once on entry; N = also replay every ~N s (jittered) while the mood holds |
+| Duration (s) | 0–300 (0) | 0 = permanent; N = auto-revert to the previous mode after N s. `system_crash` shows 10 (its stock revert) until changed |
 
 Which knobs each mood gets depends on its behaviour class: `_Wander` /
-`_Dart` moods (standby, awake, excited, alert) get all three; `_Sweep`
-(surveillance) and `_Tremble` (system_crash) get Speed + LED Bright; `_Hold`
-(sleep, hologram) gets LED Bright only. An **`<mood> Reset`** button drops that
-mood's stored knobs (`config.forget("tune_<mood>_")`) — an absent key just means
-"use the firmware value", so reset is exact and leaves other moods untouched.
-`mosquitto_sub -t '<prefix>/tune/#'` shows the retained current values.
+`_Dart` moods (standby, awake, excited, alert) get Speed + Restlessness;
+`_Sweep` (surveillance) and `_Tremble` (system_crash) get Speed; `_Hold`
+(sleep, hologram) gets neither. LED Bright is on every mood. **Audio** and
+**Audio Repeat** are on every mood; **Duration** only on the reaction moods
+(excited, alert, surveillance, system_crash). An **`<mood> Reset`** button drops
+that mood's stored knobs (`config.forget("tune_<mood>_")`) — an absent key just
+means "use the firmware value", so reset is exact and leaves other moods
+untouched. `mosquitto_sub -t '<prefix>/tune/#'` shows the retained current
+values.
+
+Mood audio is autonomous (`sound.mood_sound_task`, always running, works
+offline once a knob is set): it never starts a clip over a still-playing one
+(BUSY pin) or over a user-selected sound, and it does **not** touch the HA Sound
+entity. `system_crash` no longer screams on its own — pick `scream` in its Audio
+dropdown to bring that back.
 
 ## Servo — `app/servo.py`
 
@@ -200,9 +216,12 @@ the servo): `_Hold` (sleep, hologram), `_Sweep` (surveillance — edge-to-edge
 oscillation), `_Wander` (standby, awake — long idle, then a slow move to a
 random spot), `_Dart` (alert ≈ measured 150°/s darts with 1.5–3.5 s pauses;
 excited ≈ frantic 260°/s with 0.5–1.4 s pauses and frequent "double-takes" —
-same class, different params), `_Tremble` (system_crash jitter). `SERVO_ON_ENTER` fires one-shot side effects
-(system_crash → scream); `SERVO_MODE_TIMEOUT` auto-reverts system_crash to the
-prior mode after 10 s. No position persistence — starts at 90° every boot.
+same class, different params), `_Tremble` (system_crash jitter).
+`SERVO_MODE_TIMEOUT` is the *firmware default* auto-revert (system_crash → prior
+mode after 10 s); the per-mood **Duration** HA knob overrides it (0 = permanent).
+A landed-via-auto-revert mode won't itself auto-revert, so it can't ping-pong.
+`SERVO_ON_ENTER` (one-shot on mode entry) is now empty — the system_crash scream
+moved to the HA `audio` knob. No position persistence — starts at 90° every boot.
 
 ## LEDs — `app/leds.py`
 
@@ -218,7 +237,14 @@ Starter patterns — tune on real pixels.
 `SOUND_FOLDERS` maps a category to `(folder, count)` (counts hard-coded); a
 trigger plays a random track in that folder. `busy_monitor_task` watches BUSY
 to clear `state["sound"]` when playback ends (with a ~2 s fallback for very
-short tracks), so the UI can un-light the button.
+short tracks), so the UI can un-light the button, and publishes the BUSY level
+as `sound.is_playing()`.
+
+`mood_sound_task` drives per-mood audio from the HA `audio` / `audio_gap` knobs
+(see "Tuning moods from Home Assistant"): on mood entry, and every `audio_gap`
+seconds after, it plays a random clip from the mood's chosen category — skipped
+if `is_playing()` or a user clip is going. It never sets `state["sound"]`, so
+it's invisible to the HA Sound select, and it runs offline.
 
 SD-card layout, how to add clips, and what the DFPlayer serial protocol can and
 can't do: **[dfplayer.md](dfplayer.md)**.
