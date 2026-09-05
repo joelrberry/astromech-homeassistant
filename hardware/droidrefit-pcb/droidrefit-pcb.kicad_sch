@@ -9945,7 +9945,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C2894897"
+		(property "LCSC" "C2765186"
 			(at 39.37 185.42 0)
 			(hide yes)
 			(show_name no)
@@ -9956,7 +9956,7 @@
 				)
 			)
 		)
-		(property "MPN" "HC-TYPE-C-16P-01A"
+		(property "MPN" "TYPE-C-16PIN-2MD(073)"
 			(at 39.37 185.42 0)
 			(hide yes)
 			(show_name no)
@@ -9967,7 +9967,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "HCTL"
+		(property "Manufacturer" "SHOU HAN"
 			(at 39.37 185.42 0)
 			(hide yes)
 			(show_name no)
