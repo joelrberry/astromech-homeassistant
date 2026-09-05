@@ -20,13 +20,15 @@ Upload **`droidrefit-pcb-gerbers.zip`** (RS-274X gerbers + Excellon drill).
 ## SMD assembly (JLCPCB "Assembly")
 
 Upload:
-- **`droidrefit-pcb-BOM-JLC.csv`** — 11 line items, 17 designators
-- **`droidrefit-pcb-CPL-JLC.csv`** — 17 placements, all top side
+- **`droidrefit-pcb-BOM-JLC.csv`** — 14 line items, 20 designators
+- **`droidrefit-pcb-CPL-JLC.csv`** — 20 placements, all top side
 
-Every designator in the BOM matches one in the CPL and vice-versa (17 each).
+Every designator in the BOM matches one in the CPL and vice-versa (20 each).
 The BOM lists designators comma-separated, **not** as ranges — JLC's parser
 rejects `C5-C9` and wants `C5,C6,C7,C8,C9`. If you ever re-export from KiCad,
 re-expand any ranges before uploading.
+New since the first order: R8 (100 Ω, C22775), R9/R10 (4.7 kΩ, C23162) —
+both JLC Basic parts, no extended fee.
 
 This BOM/CPL is sized for JLC's **Economic PCBA** (no per-side setup fee).
 Includes **J1, the USB-C receptacle** (SMD with 4 through-hole anchor posts —

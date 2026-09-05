@@ -96,11 +96,16 @@ All of the above are present in the schematic netlist.
       Economic PCBA instead: C1–C4 set `dnp yes` + `in_pos_files no` in the sch,
       dropped from BOM-JLC/CPL-JLC, listed in `BOM-full.csv` as "hand-solder"
       and in the README hand-solder table. Silk outlines + refs still plotted.
-- [x] **Fab package regenerated** (2026-09-05, after the J6–J9/R8–R10
-      respin) → `fab/`: gerbers zip, Excellon drill (+PDF maps),
-      `BOM-JLC.csv` (16 lines / 24 desig) + `CPL-JLC.csv` (24), `BOM-full.csv`,
-      `fab-preview.svg`, `2d-top.png`, `README.md`. (LCSC column on the new
-      R8/R9/R10 rows still blank — see the open item above.)
+- [x] **Fab package regenerated** (2026-09-05, final — via `kicad-cli`, same
+      engine as the GUI, after the GUI finishing pass + GND stitching via) →
+      `fab/`: gerbers zip, Excellon drill (+PDF maps), `BOM-JLC.csv`
+      (14 lines / 20 desig) + `CPL-JLC.csv` (20), `BOM-full.csv`,
+      `fab-preview.svg`, `2d-top.png`, `README.md`. Hand-crafted JLC formats
+      preserved (`Designator,Mid X,Mid Y,Layer,Rotation` for CPL; C1–C4
+      dropped from both JLC files, J6–J9 hand-solder). **R8/R9/R10 LCSC
+      parts assigned**: R8 = C22775 (100 Ω 0603 1%, UNI ROYAL Basic),
+      R9/R10 = C23162 (4.7 kΩ 0603 1%, UNI ROYAL Basic) — same UNI ROYAL
+      `0603WAFxxxxT5E` family as R1–R7.
 - [x] **ESP32 socket pinout VERIFIED** against the user's board photo
       (`fab/BoardImage.HEIC`, 2026-08-30) — both headers match the footprint
       exactly (standard DOIT DevKit v1). Added silk orientation markers to
@@ -156,13 +161,12 @@ All of the above are present in the schematic netlist.
       wire). Relocated to (46.25,40), west of the card corridor, buzzer wire
       now exits near the left edge; BUZZER_PWM re-routed. **Board is now
       0 DRC errors + the same 12 pre-existing cosmetic warnings.**
-- [ ] **BOM-JLC/LCSC sourcing for R8/R9/R10 not done.** `CPL-JLC.csv` and a
-      regenerated `BOM-JLC.csv` (16 line items / 24 designators, up from 11/17)
-      both correctly include them now, but neither has real LCSC part numbers
-      yet — R1–R7's existing LCSC picks weren't a value match (no existing
-      100 Ω or 4.7 kΩ 0603 on this board) and picking new ones wasn't done
-      here to avoid guessing real stock/pricing. Same
-      `jlcsearch.tscircuit.com` flow used for the original BOM.
+- [x] **R8/R9/R10 LCSC parts assigned (2026-09-05).** R8 = C22775
+      (100 Ω 0603 1%, UNI ROYAL `0603WAF1000T5E`, JLC **Basic**),
+      R9/R10 = C23162 (4.7 kΩ 0603 1%, UNI ROYAL `0603WAF4701T5E`, JLC
+      **Basic**) — added as `LCSC`/`MPN`/`Manufacturer`/`JLCPCB_Assembly`
+      props in the sch, same UNI ROYAL family as R1–R7, both Basic so no
+      extended-part fee. BOM-JLC / CPL-JLC / BOM-full regenerated.
 - [ ] Silk polish (7 ref-text-over-pad warnings) + U2 footprint re-sync — cosmetic, pre-existing.
 - [ ] Order: bare board from gerbers zip; **Economic** SMD assembly from
       BOM-JLC + CPL-JLC (check rotations in JLC's preview — esp. Q1/U3/D1/J1);
