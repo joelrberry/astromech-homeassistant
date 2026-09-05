@@ -12,7 +12,8 @@ DFPLAYER_RX_PIN = 16    # UART2 RX  <- DFPlayer TX
 BUSY_PIN = 4            # DFPlayer BUSY (active-low)
 RESET_BTN_PIN = 0       # devkit BOOT button, doubles as the factory-reset hold
 NEOPIXEL_PIN = 5        # WS2812 dome pixels (data); via 74AHCT1G125 on the PCB
-NEOPIXEL_COUNT = 4      # 0 holoprojector, 1 logic display, 2 rear circle, 3 light bar
+NEOPIXEL_COUNT = 4      # 0 front PSI, 1 front logic display, 2 rear PSI,
+                        # 3 rear logic display ("light bar") — see app/leds.py
 
 # Front-panel buttons — each wired pin <-> GND, read active-low with the
 # internal pull-up (no external parts). Broken out on the PCB as J_BTN.

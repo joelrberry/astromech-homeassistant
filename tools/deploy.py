@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sync droidrefit/ firmware to a MicroPython board over USB, via mpremote.
 
-    python3 tools/deploy.py [--port PORT] [--wipe] [--stay] [--format]
+    python3 tools/deploy.py [--port PORT] [--wipe] [--stay] [--format] [--no-mpy]
 
 The board is held in SAFE MODE for the whole copy (noboot.txt + reset, so the
 app isn't running), each file is copied then SHA-256-verified on the device and
@@ -14,12 +14,30 @@ run leaves the board safely at the REPL — just run it again, it converges.
     --format   reformat the flash filesystem first (LAST RESORT — also wipes
                /config.json; re-provision after). For when verified copies keep
                failing on the same file (corrupt fs, not a flaky link).
+    --no-mpy   push plain .py instead of precompiled .mpy (see below) — for
+               debugging with real on-device tracebacks, or if mpy-cross isn't
+               installed.
     --port     serial port (default: let mpremote auto-detect)
     --run      accepted and ignored (reboot-after is now the default)
 
 Pushes app/*.py, lib/**, boot.py, main.py. Never writes /config.json.
+Skips app/config_baked.py (gitignored, bench-only) even if present locally —
+it should never follow a dev machine's checkout onto a board.
 
-Needs:  pip install mpremote
+By default, app/*.py and lib/** are precompiled to .mpy (via mpy-cross) before
+pushing — smaller on flash, and skips the on-device parse+compile step at
+import time, which matters on the classic ESP32's small heap (compiling from
+source needs a transient buffer on top of the bytecode it produces; a .mpy
+just loads). boot.py/main.py stay as plain .py (tiny, and readable at the REPL
+for rescue). mpy-cross's bytecode format is version-locked to the MicroPython
+build it targets — the installed mpy-cross version MUST match the board's
+MicroPython version exactly, or every import fails with "incompatible .mpy
+file" (a loud, safe failure, not a silent one). For v1.29.0:
+pip install mpy-cross==1.29.0.post2 — bump this pin if the firmware is ever
+upgraded. Never leaves both x.py and x.mpy for the same module on the device
+(stale-extension cleanup on every push) to avoid import-order ambiguity.
+
+Needs:  pip install mpremote mpy-cross==1.29.0.post2
 """
 
 import argparse
@@ -27,9 +45,14 @@ import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "droidrefit"))
+
+# boot.py/main.py stay as plain .py on-device even with mpy on — tiny files,
+# and readable at the REPL if something goes wrong during the boot dance.
+_MPY_EXEMPT = {"boot.py", "main.py"}
 
 # app modules imported on the device as the post-copy integrity check
 _VERIFY = ("app.config", "app.core", "app.hw", "app.version", "app.diag",
@@ -119,25 +142,70 @@ def _put(port, local, rpath, tries=4):
     return False
 
 
+def _mpy_cross_ok():
+    r = subprocess.run([sys.executable, "-m", "mpy_cross", "--version"],
+                       capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.strip()
+
+
+def _compile_mpy(src, out_path):
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    r = subprocess.run([sys.executable, "-m", "mpy_cross", src, "-o", out_path],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("\n!! mpy-cross failed on %s:\n%s" % (src, r.stderr))
+
+
 def _enter_safe_mode(port):
+    # A real hardware reset ("reset", DTR/RTS EN-pin toggle), not
+    # "soft-reset" (Ctrl-D, MicroPython VM only) — a soft-reset leaves
+    # ESP-IDF C-level driver singletons (WiFi's netif/wifi_started state
+    # among them) stale, which can surface later as an esp_netif
+    # "duplicate key" / "wifi:init nvs: failed" wedge on the next boot that
+    # actually brings WiFi up. See droidrefit-firmware-status memory.
     print("safe mode: writing noboot.txt + reboot")
     _mpremote(port, "exec", "open('noboot.txt','w').close()", retries=3)
-    _mpremote(port, "soft-reset", check=False)
+    _mpremote(port, "reset", check=False)
     time.sleep(1.5)
 
 
-def _file_list():
+# Gitignored, bench-only files that must never follow a dev machine's local
+# checkout onto a board — config_baked.py carries real WiFi/MQTT credentials
+# and skips the setup portal entirely if present, which is never what you want
+# on a board being provisioned normally.
+_SKIP_FILES = {"config_baked.py"}
+
+
+def _file_list(mpy_dir, use_mpy):
+    """Returns (local, rpath, stale_rpath) triples. `stale_rpath` is the
+    counterpart-extension path to rm on the device first (or None) — keeps
+    a .py and a .mpy for the same module from ever coexisting there."""
     app_dir = os.path.join(ROOT, "app")
-    pairs = []
-    for f in sorted(x for x in os.listdir(app_dir) if x.endswith(".py")):
-        pairs.append((os.path.join(app_dir, f), ":app/" + f))
-    pairs.append((os.path.join(ROOT, "lib", "dfplayer.py"), ":lib/dfplayer.py"))
-    pairs.append((os.path.join(ROOT, "lib", "ssd1306.py"), ":lib/ssd1306.py"))
-    pairs.append((os.path.join(ROOT, "lib", "umqtt", "simple.py"),
-                  ":lib/umqtt/simple.py"))
-    pairs.append((os.path.join(ROOT, "boot.py"), ":boot.py"))
-    pairs.append((os.path.join(ROOT, "main.py"), ":main.py"))
-    return pairs
+    entries = []
+    for f in sorted(x for x in os.listdir(app_dir)
+                    if x.endswith(".py") and x not in _SKIP_FILES):
+        entries.append((os.path.join(app_dir, f), "app/" + f))
+    entries.append((os.path.join(ROOT, "lib", "dfplayer.py"), "lib/dfplayer.py"))
+    entries.append((os.path.join(ROOT, "lib", "ssd1306.py"), "lib/ssd1306.py"))
+    entries.append((os.path.join(ROOT, "lib", "umqtt", "simple.py"),
+                    "lib/umqtt/simple.py"))
+    entries.append((os.path.join(ROOT, "boot.py"), "boot.py"))
+    entries.append((os.path.join(ROOT, "main.py"), "main.py"))
+
+    triples = []
+    for local, rrel in entries:
+        # rrel-based, not basename — droidrefit/app/main.py is a real,
+        # sizable app module and should compile like the rest of app/; only
+        # the two root-level bootstrap files are exempt.
+        compile_this = use_mpy and rrel not in _MPY_EXEMPT
+        if compile_this:
+            mpy_rel = rrel[:-3] + ".mpy"
+            out = os.path.join(mpy_dir, mpy_rel)
+            _compile_mpy(local, out)
+            triples.append((out, ":" + mpy_rel, ":" + rrel))
+        else:
+            triples.append((local, ":" + rrel, ":" + rrel[:-3] + ".mpy"))
+    return triples
 
 
 def main():
@@ -148,6 +216,8 @@ def main():
     ap.add_argument("--wipe", action="store_true")
     ap.add_argument("--stay", action="store_true")
     ap.add_argument("--format", dest="do_format", action="store_true")
+    ap.add_argument("--no-mpy", dest="no_mpy", action="store_true",
+                    help="push plain .py instead of precompiled .mpy")
     ap.add_argument("--run", action="store_true",
                     help="accepted and ignored (reboot-after is the default)")
     a = ap.parse_args()
@@ -156,6 +226,15 @@ def main():
         sys.exit("mpremote not found on PATH.  pip install mpremote")
     if not os.path.isdir(os.path.join(ROOT, "app")):
         sys.exit("can't find %s/app — run from the repo" % ROOT)
+
+    use_mpy = not a.no_mpy
+    if use_mpy:
+        ver = _mpy_cross_ok()
+        if not ver:
+            sys.exit("mpy-cross not found.  pip install mpy-cross==1.29.0.post2\n"
+                     "(must match the board's MicroPython version exactly — "
+                     "see the module docstring)  or pass --no-mpy")
+        print("mpy-cross: %s" % ver)
 
     p = a.port
 
@@ -184,9 +263,14 @@ def main():
     for d in (":app", ":lib", ":lib/umqtt"):
         _mpremote(p, "fs", "mkdir", d, check=False)
 
-    pairs = _file_list()
-    print("copying + verifying %d files" % len(pairs))
-    failed = [rpath for local, rpath in pairs if not _put(p, local, rpath)]
+    with tempfile.TemporaryDirectory(prefix="droidrefit-mpy-") as mpy_dir:
+        triples = _file_list(mpy_dir, use_mpy)
+        print("copying + verifying %d files%s"
+             % (len(triples), " (precompiled .mpy)" if use_mpy else ""))
+        for _, rpath, stale in triples:
+            if stale != rpath:
+                _mpremote(p, "fs", "rm", stale, check=False)   # no stray dupe
+        failed = [rpath for local, rpath, _ in triples if not _put(p, local, rpath)]
 
     if failed:
         print("\n!! FAILED to verify: " + ", ".join(failed))
@@ -202,14 +286,13 @@ def main():
 
     if a.stay:
         print("\n--stay: board left in safe mode (noboot.txt present).")
-        print("run it:  mpremote fs rm :noboot.txt  &&  mpremote soft-reset")
+        print("run it:  mpremote fs rm :noboot.txt  &&  mpremote reset")
         return
 
     print("removing noboot.txt + reboot")
     _mpremote(p, "fs", "rm", ":noboot.txt", retries=3)
-    _mpremote(p, "soft-reset", check=False)
-    print("\ndone — now HARD power-cycle the board (pull power / press EN).")
-    print("a soft reset leaves timers, UART, PWM and driver singletons stale.")
+    _mpremote(p, "reset", check=False)   # hard reset — see _enter_safe_mode
+    print("\ndone.")
 
 
 if __name__ == "__main__":

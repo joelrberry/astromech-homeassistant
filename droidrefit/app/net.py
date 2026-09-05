@@ -551,6 +551,27 @@ async def connect_wifi():
     gc.collect()
     gc.collect()
     wlan = network.WLAN(network.STA_IF)
+    if wlan.active() and not wlan.isconnected():
+        # We activated successfully earlier this boot but the link then
+        # dropped (router hiccup, etc.) without us ever deactivating —
+        # cycle it before reconnecting instead of connect()-ing again on
+        # top of a stale association. NOTE: this does NOT touch the
+        # esp_netif "duplicate key" / "wifi:init nvs: failed" wedge —
+        # confirmed against ports/esp32/network_wlan.c that a failed
+        # esp_wifi_start() leaves MicroPython's own `wifi_started` flag
+        # (which wlan.active() reads) at False, so that wedge never reaches
+        # this branch at all, and active(False) is a no-op when the flag is
+        # already False (it only calls esp_wifi_stop() when wifi_started is
+        # true). Nothing reachable from Python recovers that wedge once it
+        # happens — only a real reboot does (see droidrefit-firmware-status
+        # memory). Deliberately NOT auto-rebooting here: that would clear
+        # WiFi/MQTT but interrupt whatever the droid is physically doing,
+        # which loses the offline-first guarantee for a networking problem.
+        try:
+            wlan.active(False)
+        except Exception as e:
+            core.log_always("[wifi] active(False) before retry failed:", e)
+        await uasyncio.sleep_ms(200)
     wlan.active(True)
     try:
         # best-effort mDNS: many routers/OSes then resolve <hostname>.local

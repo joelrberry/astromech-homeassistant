@@ -371,4 +371,8 @@ async def servo_task():
         servo.duty_u16(angle_to_duty_u16(pos))
         core.servo_state["angle"] = pos
         core.servo_state["moving"] = abs(vel) > 0.5   # deg/s — "visibly moving"
+        # standby's LEDs sync to this (leds._reaction_for); every other mode's
+        # behaviour either has no .phase (_Hold/_Sweep/_Tremble) or one nothing
+        # reads (_Dart's "wait"/"dart"), so this is a no-op for them.
+        core.servo_state["phase"] = getattr(behavior, "phase", None)
         await uasyncio.sleep_ms(TICK_MS)

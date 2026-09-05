@@ -26,3 +26,7 @@ config.json.devicebackup
 
 # serial-log.py captures (runtime artifacts)
 serial-*.log
+
+# downloaded MicroPython firmware .bin — third-party, re-downloadable from
+# micropython.org, not our code
+/firmware/
