@@ -5307,7 +5307,7 @@
 			)
 		)
 		(property "Value" "MountingHole_3.2mm"
-			(at -4.5 -4.5 270)
+			(at 0 -15.5 270)
 			(layer "F.Fab")
 			(uuid "4ab00ad0-bbcb-4ac9-ac20-e8fd777f895a")
 			(effects
@@ -5509,7 +5509,7 @@
 			)
 		)
 		(property "Value" "MountingHole_3.2mm"
-			(at -5 6 90)
+			(at 0 14 90)
 			(layer "F.Fab")
 			(uuid "accb30bb-4452-46c2-b92c-20bdd93bd1aa")
 			(effects
@@ -6227,7 +6227,7 @@
 			)
 		)
 		(property "Value" "MountingHole_3.2mm"
-			(at -5 -5 0)
+			(at -14 0 0)
 			(layer "F.Fab")
 			(uuid "94b61589-615d-492b-8e0a-e2481d5cc263")
 			(effects
@@ -8304,7 +8304,7 @@
 			)
 		)
 		(property "Value" "MountingHole_3.2mm"
-			(at -4 4.5 0)
+			(at -14 0 0)
 			(layer "F.Fab")
 			(uuid "bee6099f-410f-4af8-ad84-e44f9f2bdd8a")
 			(effects
@@ -8436,6 +8436,14 @@
 		(layer "F.Cu")
 		(net "CC2")
 		(uuid "4102465f-e92b-48e0-ab10-ef04ad4595f5")
+	)
+	(segment
+		(start 46.25 42.54)
+		(end 44 49.225)
+		(width 0.25)
+		(layer "F.Cu")
+		(net "GND")
+		(uuid "f304d569-3692-4e16-bdec-28fb53b98386")
 	)
 	(via
 		(at 58.95 44.95)
