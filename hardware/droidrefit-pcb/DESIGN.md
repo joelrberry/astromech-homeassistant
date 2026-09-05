@@ -91,10 +91,11 @@ All of the above are present in the schematic netlist.
       Economic PCBA instead: C1–C4 set `dnp yes` + `in_pos_files no` in the sch,
       dropped from BOM-JLC/CPL-JLC, listed in `BOM-full.csv` as "hand-solder"
       and in the README hand-solder table. Silk outlines + refs still plotted.
-- [x] **Fab package regenerated** (2026-08-30, silk labels de-overlapped by
-      user) → `fab/`: gerbers zip, Excellon drill (+PDF maps),
-      `BOM-JLC.csv` (11 lines / 17 desig) + `CPL-JLC.csv` (17), `BOM-full.csv`,
-      `fab-preview.svg`, `2d-top.png`, `README.md`.
+- [x] **Fab package regenerated** (2026-09-05, after the J6–J9/R8–R10
+      respin) → `fab/`: gerbers zip, Excellon drill (+PDF maps),
+      `BOM-JLC.csv` (16 lines / 24 desig) + `CPL-JLC.csv` (24), `BOM-full.csv`,
+      `fab-preview.svg`, `2d-top.png`, `README.md`. (LCSC column on the new
+      R8/R9/R10 rows still blank — see the open item above.)
 - [x] **ESP32 socket pinout VERIFIED** against the user's board photo
       (`fab/BoardImage.HEIC`, 2026-08-30) — both headers match the footprint
       exactly (standard DOIT DevKit v1). Added silk orientation markers to
@@ -108,10 +109,61 @@ All of the above are present in the schematic netlist.
       the board interior at the ~8 mm socket height — clear of everything
       until C1 (~30 mm away). Reach over the board to swap cards. Rotate U2
       180° only if edge-facing card access matters more than short UART runs.
-- [ ] Silk polish (7 ref-text-over-pad warnings) + U2 footprint re-sync — cosmetic.
+- [x] **`J_BTN`/`J_BUZZER`/`J_OLED`/`J_UART` drawn and routed (2026-09-05,
+      respin).** All four were fully speced in this doc from 2026-08-31 but
+      never actually placed in the schematic/board until now. Added as
+      `J6`/`J7`/`J8`/`J9` (plain refs, matching J2/J3/J5's own naming — not
+      the descriptive `J_*` refs this doc used at planning time), each
+      `Connector_Generic:Conn_01x0N` on `PinHeader_2.54mm` footprints, `dnp
+      yes` + `Assembly: hand-solder` (matching J2/J5's treatment — these are
+      2.54 mm headers meant for hand-soldering, not JLC-placed). Also added:
+      `R8` (100 Ω, buzzer series resistor) and `R9`/`R10` (4.7 kΩ, I2C
+      SDA/SCL pull-ups to 3V3) — both real SMD 0603s, JLC-placed like
+      R1–R7. Board is now **32 footprints, 30 nets**. Placement: J6 bottom-
+      left near U1 (button column), J7 mid-board near U3, J8+R9+R10 clustered
+      top-left above U1 (OLED group), J9 in the open pocket at (83,40)
+      between the JP1/U3/R3 cluster and J3. Routed by hand plus targeted
+      Freerouting passes (`targetNets`) for the denser fan-outs, both refilled
+      afterward — **zone refill after any routing change in this design is
+      not optional**: a stale GND pour fill reads as dozens of phantom
+      "0.0000 mm actual clearance" errors against copper added since the last
+      fill, which resolve immediately on refill and are not real problems.
+- [x] **JP1 default bridge corrected (2026-09-05).** The NeoPixel bring-up
+      (see [[droidrefit-pcb-status]] / `droidrefit/bench/test-neopixel.py`)
+      empirically confirmed the real dome-board connector order is
+      **GND-pin1 / V+-pin2 / Signal-pin3** — the opposite of what this doc
+      previously listed as the shipped default (DIN-P1/V+-P2/GND-P3, a
+      pre-bring-up guess). Since JP1 exists specifically so a stock-built
+      board doesn't need rework, re-mapped which J3 pin each bridge-field pad
+      reaches (pad4↔J3/3, pad6↔J3/1, pad5↔J3/2 unchanged) so the **same-row,
+      no-cut default bridge now delivers the confirmed-correct pinout**. See
+      the corrected Connectors-table row below.
+- [ ] **One residual DRC error, not yet resolved**: "Items shorting two nets
+      (NPX_P2 and GND)" at JP1 pad5 (69,42) — a zone-clearance sliver in the
+      6-pad SMD bridge-field cluster (pads on a 2 mm pitch, only ~0.6–0.8 mm
+      of physical gap against a 0.3 mm zone-clearance rule). Reproduced
+      consistently across manual routing, autorouting, multiple zone
+      refills, and small position nudges to the surrounding NPX_P1/P3 traces
+      — doesn't look caused by any specific trace choice, more likely a
+      zone-fill-algorithm edge case in this specific tight cluster. JP1 is
+      `dnp` (bare pads, hand-bridged by the builder, no part actually
+      populated there), so the real-world manufacturability risk is low, but
+      this should get a quick look in the KiCad GUI (drag JP1 or its
+      neighbors by a fraction of a mm and refill — much faster interactively
+      with visual feedback than blind coordinate pushes) before treating the
+      board as truly 0-DRC-error again.
+- [ ] **BOM-JLC/LCSC sourcing for R8/R9/R10 not done.** `CPL-JLC.csv` and a
+      regenerated `BOM-JLC.csv` (16 line items / 24 designators, up from 11/17)
+      both correctly include them now, but neither has real LCSC part numbers
+      yet — R1–R7's existing LCSC picks weren't a value match (no existing
+      100 Ω or 4.7 kΩ 0603 on this board) and picking new ones wasn't done
+      here to avoid guessing real stock/pricing. Same
+      `jlcsearch.tscircuit.com` flow used for the original BOM.
+- [ ] Silk polish (7 ref-text-over-pad warnings) + U2 footprint re-sync — cosmetic, pre-existing.
 - [ ] Order: bare board from gerbers zip; **Economic** SMD assembly from
       BOM-JLC + CPL-JLC (check rotations in JLC's preview — esp. Q1/U3/D1/J1);
-      hand-solder C1–C4 + J2/J5 + 2 module sockets; plug in ESP32 + DFPlayer.
+      hand-solder C1–C4 + J2/J5/J6/J7/J8/J9 + 2 module sockets; plug in ESP32
+      + DFPlayer.
 
 ### Provisional footprint notes
 - Q1 = SOT-23 placeholder; real part is Id ≥ 6 A → likely DPAK/SOT-89.
@@ -180,7 +232,7 @@ servo + NeoPixel + DFPlayer branch; wide fill everywhere else.
 | J_DFP   | 2 × 1×8 female socket, 2.54 mm         | DFPlayer Mini 16‑pin    | row spacing **15.24 mm (0.6 in)** — confirmed |
 | J_SERVO | 1×3 header, 2.54 mm, friction lock     | SIG / +5V / GND         | dome servo — confirm lead order before crimping |
 | J3 (J_NPX) | JST‑SH 1.0 mm 3‑pin (SMD)           | pins → JP1 P1/P2/P3     | mates the **Bambu XC016** cable (300 mm straight‑through JST‑SH 1.0 3‑pin) to the droid's existing multi‑LED board |
-| JP1     | pin‑order **solder‑bridge field** (custom)| DIN/V+/GND ↔ P1/P2/P3  | the LED board's SH1.0 order can't be measured — JP1 maps DATA/+5V/GND to any of the 3 connector pins. Ships bridged DIN‑P1 / V+‑P2 / GND‑P3; cut & re‑bridge to correct it. V+ = **+5V** (confirmed). |
+| JP1     | pin‑order **solder‑bridge field** (custom)| DIN/V+/GND ↔ P1/P2/P3  | maps DATA/+5V/GND to any of the 3 connector pins. **Ships bridged Signal‑P1 / V+‑P2 / GND‑P3** (corrected 2026‑09‑05 to match the empirically‑confirmed dome pinout — see Status); cut & re‑bridge only if a *different* LED board's SH1.0 order shows up. V+ = **+5V** (confirmed). |
 | J_SPK   | JST‑PH 2.0 mm 2‑pin                    | SPK+ / SPK−             | 4–8 Ω speaker, DFPlayer pins 6 & 8 — differential, do **not** ground |
 | J_BTN   | 1×4 header, 2.54 mm                    | GND / IO32 / IO33 / IO25 | front‑panel buttons: mode ▲ (IO32), mode ▼ (IO33), sound (IO25). Each wires between its signal pin and GND; firmware internal pull‑up, **no external resistors**. Tap = cycle / hold = volume; Mode ▲ + Sound 5 s = WiFi setup. |
 | J_BUZZER | 1×2 header, 2.54 mm (or onboard piezo pads) | IO27 / GND         | piezo buzzer for UI feedback. Direct off IO27 through ~100 Ω for a quiet beep; footprint should also allow a 2N7002 low‑side driver + piezo from +5 V. Skipped in firmware when `buzzer_enabled` is false. |
@@ -243,10 +295,14 @@ Only VCC/RX/TX/SPK_2/GND/SPK_1/BUSY are wired; DAC/IO/ADKEY/USB left unconnected
    pins land on.
 2. **DFPlayer socket row spacing** — RESOLVED: 15.24 mm (0.6 in), 2.54 mm pitch.
 3. **J_SERVO pin order** — match the dome servo's existing 3‑pin lead.
-4. **NeoPixel SH1.0 pin order** — RESOLVED as a build‑time solder‑bridge (JP1),
-   since the LED board can't be probed. Default bridge = DIN/V+/GND (pin 1→3).
-   J3 gender: XC016 is a plug‑both‑ends cable; J3 must be the mating SH1.0
-   **top/side‑entry SMD socket** — confirm entry direction at layout.
+4. **NeoPixel SH1.0 pin order** — RESOLVED, twice: first as a build‑time
+   solder‑bridge (JP1) since the LED board couldn't be probed, then
+   (2026‑09‑05) the bring‑up on real hardware actually measured it —
+   **Signal/V+/GND**, not the DIN/V+/GND guess this item originally recorded
+   — and JP1's default bridge was corrected to match (see Status). J3
+   gender: XC016 is a plug‑both‑ends cable; J3 must be the mating SH1.0
+   **top/side‑entry SMD socket** — entry direction still unconfirmed at
+   layout, unrelated to the pin-order fix above.
 5. RESOLVED — spare GPIOs are broken out as `J_BTN` (IO32/33/25 + GND) for the
    three front-panel buttons; firmware drives them with internal pull-ups.
 

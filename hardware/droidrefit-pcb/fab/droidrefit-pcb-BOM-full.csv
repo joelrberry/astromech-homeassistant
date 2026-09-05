@@ -1,17 +1,27 @@
-"Designator","Value","Qty","Footprint","LCSC","MPN","DNP"
-"C1,C4","1000u/10V","2","Capacitor_SMD:CP_Elec_8x10.5","C310838","RVE1A102M0810","hand-solder"
-"C2,C3","470u/10V","2","Capacitor_SMD:CP_Elec_6.3x7.7","C335982","RVT1A471M0607","hand-solder"
-"C5,C6,C7,C8,C9","100n","5","Capacitor_SMD:C_0603_1608Metric","C14663","CC0603KRX7R9BB104",""
-"D1","GRN","1","LED_SMD:LED_0603_1608Metric","C965804","XL-1608UGC-04",""
-"F1","PTC 2A hold / 4A trip","1","Fuse:Fuse_1812_4532Metric","C18198342","1812L200/30GR",""
-"J1","USB-C 5V in","1","Connector_USB:USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A","C2765186","TYPE-C 16PIN 2MD",""
-"J2","SERVO SIG/+5V/GND","1","Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical","C49257","1x3 2.54mm header","true"
-"J3","NEOPIXEL JST-SH","1","Connector_JST:JST_SH_BM03B-SRSS-TB_1x03-1MP_P1.00mm_Vertical","C160389","BM03B-SRSS-TB(LF)(SN)",""
-"J5","SPEAKER 4-8ohm","1","Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical","C131337","B2B-PH-K-S","true"
-"Q1","AO3401A","1","Package_TO_SOT_SMD:SOT-23","C15127","AO3401A",""
-"R1","100k","1","Resistor_SMD:R_0603_1608Metric","C25803","0603WAF1003T5E",""
-"R2","1k","1","Resistor_SMD:R_0603_1608Metric","C21190","0603WAF1001T5E",""
-"R3","330","1","Resistor_SMD:R_0603_1608Metric","C23138","0603WAF3300T5E",""
-"R5","2k","1","Resistor_SMD:R_0603_1608Metric","C22975","0603WAF2001T5E",""
-"R6,R7","5.1k","2","Resistor_SMD:R_0603_1608Metric","C23186","0603WAF5101T5E",""
-"U3","74AHCT1G125","1","Package_TO_SOT_SMD:SOT-23-5","C7484","SN74AHCT1G125DBVR",""
+value,footprint,quantity,references
+5.1k,Resistor_SMD:R_0603_1608Metric,2,"['R7', 'R6']"
+SERVO SIG/+5V/GND,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,1,['J2']
+100n,Capacitor_SMD:C_0603_1608Metric,5,"['C6', 'C5', 'C9', 'C7', 'C8']"
+UART0 ACCESS,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,1,['J9']
+DFPlayer-Mini,droidrefit:DFPlayer_Mini_Socket,1,['U2']
+USB-C 5V in,Connector_USB:USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A,1,['J1']
+BUZZER,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,1,['J7']
+74AHCT1G125,Package_TO_SOT_SMD:SOT-23-5,1,['U3']
+330,Resistor_SMD:R_0603_1608Metric,1,['R3']
+ESP32-DevKit-30,droidrefit:ESP32_DevKit_30pin_Socket_24p5mm,1,['U1']
+4.7k,Resistor_SMD:R_0603_1608Metric,2,"['R10', 'R9']"
+1000u/10V,Capacitor_SMD:CP_Elec_8x10.5,2,"['C4', 'C1']"
+GRN,LED_SMD:LED_0603_1608Metric,1,['D1']
+NPX pin-order bridge,droidrefit:NeoPixel_Cfg_BridgeField_6,1,['JP1']
+1k,Resistor_SMD:R_0603_1608Metric,1,['R2']
+NEOPIXEL JST-SH,Connector_JST:JST_SH_BM03B-SRSS-TB_1x03-1MP_P1.00mm_Vertical,1,['J3']
+470u/10V,Capacitor_SMD:CP_Elec_6.3x7.7,2,"['C2', 'C3']"
+MountingHole_3.2mm,MountingHole:MountingHole_3.2mm,4,"['MH3', 'MH1', 'MH2', 'MH4']"
+PTC 2A hold / 4A trip,Fuse:Fuse_1812_4532Metric,1,['F1']
+SPEAKER 4-8ohm,Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,1,['J5']
+100k,Resistor_SMD:R_0603_1608Metric,1,['R1']
+P-MOSFET revpol,Package_TO_SOT_SMD:SOT-23,1,['Q1']
+OLED I2C,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,1,['J8']
+2k,Resistor_SMD:R_0603_1608Metric,1,['R5']
+100,Resistor_SMD:R_0603_1608Metric,1,['R8']
+BUTTONS,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,1,['J6']

@@ -62,6 +62,10 @@ wizard draws each part on the board — rotate any that look wrong. Check:
 | C2, C3 | 470 µF 10 V SMD electrolytic, CP_Elec_6.3×7.7 | C335982 |
 | J2 | 1×3 2.54 mm pin header (servo) | C49257 |
 | J5 | JST-PH 2.0 mm 2-pin (speaker) | C131337 |
+| J6 | 1×4 2.54 mm pin header (front-panel buttons) | — TBD |
+| J7 | 1×2 2.54 mm pin header (piezo buzzer) | — TBD |
+| J8 | 1×4 2.54 mm pin header (OLED I2C) | — TBD |
+| J9 | 1×4 2.54 mm pin header (UART0 access) | — TBD |
 | U1 socket | **2× 1×15 female header, 2.54 mm** — buy 2 | — |
 | U2 socket | **2× 1×8 female header, 2.54 mm** — buy 2 | — |
 
@@ -72,8 +76,13 @@ Then plug in: **ESP32 DevKit 30-pin** (your Elegoo one) and a **DFPlayer
 Mini**. Loads on the connectors: dome servo → J2, R2 LED board via a Bambu
 **XC016** JST-SH cable → J3, 4–8 Ω speaker → J5. Power: any USB-C cable → J1.
 
-JP1 = bare solder-bridge pads, ships bridged DIN→P1 / V+→P2 / GND→P3; cut &
-re-bridge if the LED board's SH1.0 order differs.
+JP1 = bare solder-bridge pads, ships bridged **Signal→P1 / V+→P2 / GND→P3**
+(corrected 2026-09-05 to match the dome board's actual measured pinout —
+see DESIGN.md); cut & re-bridge only if a *different* LED board's SH1.0
+order shows up.
+
+Also hand-solder J6/J7/J8/J9 only if you're actually wiring up buttons /
+buzzer / an OLED / a UART debug cable on this unit — they're optional.
 
 ## Known cosmetic DRC items (do not block fab)
 
@@ -82,6 +91,11 @@ re-bridge if the LED board's SH1.0 order differs.
   U2 → Update Footprint from Library, or ignore.
 - Clearance rule is 0.15 mm in the project. If KiCad ever shows a 0.1988 mm
   flag at JP1, re-set Board Setup → Constraints → Min clearance = 0.15.
+- **1 real (non-cosmetic) DRC error as of 2026-09-05**: a GND/NPX_P2 zone-
+  clearance short at JP1 pad5, in the same bare bridge-field cluster. Low
+  real-world risk (bare pads, no part populated there) but worth a quick
+  nudge-and-refill pass in the KiCad GUI before ordering. See DESIGN.md
+  Status for what's been tried already.
 
 ## Files
 
