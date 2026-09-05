@@ -867,7 +867,7 @@
 		(layer "F.Cu")
 		(uuid "11138500-a03c-45fd-b4d0-de10f9acf60d")
 		(at 60 17)
-		(descr "DFPlayer Mini on 2x 1x8 female sockets. Module body ~20.2mm square; 15.24 x 17.78mm pin field (2.54mm pitch, 0.6in rows) sits inside it. Pads 1-8 left edge top-to-bottom (VCC top), 9-16 right edge CCW (BUSY 16 top-right). microSD slot overhangs the pin1/16 end ~4mm.")
+		(descr "DFPlayer Mini on 2x 1x8 female sockets. Module body ~20.2 x 20.2 mm (square). Pins: 2.54mm pitch, 8 per row, 15.24mm (0.6in) row spacing - the 15.24 x 17.78mm pin field sits inside the 20.2mm square board. Pads 1-8 = left edge top-to-bottom (VCC at top), 9-16 = right edge counter-clockwise (BUSY pin16 top-right, IO_1 pin9 bottom-right). microSD card slot is on the pin 8/9 (SPK/DAC) end - card enters from that short edge (~4mm overhang). Keep that edge accessible. Verified against user photo 2026-08-30.")
 		(tags "DFPlayer mini mp3 socket")
 		(property "Reference" "U2"
 			(at 0 -1.27 0)
@@ -938,8 +938,8 @@
 			(uuid "bb22cc33-dd44-ee55-ff66-778899001122")
 		)
 		(fp_rect
-			(start -10.6 -10.6)
-			(end 10.6 10.6)
+			(start -10.7 -10.7)
+			(end 10.7 10.7)
 			(stroke
 				(width 0.05)
 				(type default)
@@ -3586,7 +3586,7 @@
 		(descr "NeoPixel pin-order solder-bridge field. Left column pads 1/2/3 = DIN / V+ / GND. Right column pads 4/5/6 = connector pins P1 / P2 / P3. Default: blob-bridge 1-4, 2-5, 3-6 (DIN-P1 / V+-P2 / GND-P3). To remap, run a short wire link between the correct source and connector pad.")
 		(tags "solder bridge jumper config neopixel")
 		(property "Reference" "JP1"
-			(at 0 -1.27 0)
+			(at 0 4.5 0)
 			(layer "F.SilkS")
 			(uuid "b6f7823f-9950-48d3-9483-018170077aea")
 			(effects
