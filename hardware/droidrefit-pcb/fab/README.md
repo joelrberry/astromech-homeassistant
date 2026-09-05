@@ -91,11 +91,10 @@ buzzer / an OLED / a UART debug cable on this unit — they're optional.
   U2 → Update Footprint from Library, or ignore.
 - Clearance rule is 0.15 mm in the project. If KiCad ever shows a 0.1988 mm
   flag at JP1, re-set Board Setup → Constraints → Min clearance = 0.15.
-- **1 real (non-cosmetic) DRC error as of 2026-09-05**: a GND/NPX_P2 zone-
-  clearance short at JP1 pad5, in the same bare bridge-field cluster. Low
-  real-world risk (bare pads, no part populated there) but worth a quick
-  nudge-and-refill pass in the KiCad GUI before ordering. See DESIGN.md
-  Status for what's been tried already.
+- DRC is **0 errors** as of 2026-09-05 (the earlier GND/NPX_P2 short was J9
+  sitting in the JP1→J3 trace path — fixed by rerouting NPX_P2; J7 also
+  moved out of the microSD card path). Only the cosmetic silk/lib warnings
+  above remain.
 
 ## Files
 

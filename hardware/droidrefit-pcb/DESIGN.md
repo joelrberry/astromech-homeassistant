@@ -138,20 +138,19 @@ All of the above are present in the schematic netlist.
       reaches (pad4↔J3/3, pad6↔J3/1, pad5↔J3/2 unchanged) so the **same-row,
       no-cut default bridge now delivers the confirmed-correct pinout**. See
       the corrected Connectors-table row below.
-- [ ] **One residual DRC error, not yet resolved**: "Items shorting two nets
-      (NPX_P2 and GND)" at JP1 pad5 (69,42) — a zone-clearance sliver in the
-      6-pad SMD bridge-field cluster (pads on a 2 mm pitch, only ~0.6–0.8 mm
-      of physical gap against a 0.3 mm zone-clearance rule). Reproduced
-      consistently across manual routing, autorouting, multiple zone
-      refills, and small position nudges to the surrounding NPX_P1/P3 traces
-      — doesn't look caused by any specific trace choice, more likely a
-      zone-fill-algorithm edge case in this specific tight cluster. JP1 is
-      `dnp` (bare pads, hand-bridged by the builder, no part actually
-      populated there), so the real-world manufacturability risk is low, but
-      this should get a quick look in the KiCad GUI (drag JP1 or its
-      neighbors by a fraction of a mm and refill — much faster interactively
-      with visual feedback than blind coordinate pushes) before treating the
-      board as truly 0-DRC-error again.
+- [x] **DRC back to 0 errors (2026-09-05).** The residual GND/NPX_P2 short
+      turned out to be J9 sitting in the path of the JP1→J3 NeoPixel-bundle
+      traces — the straight NPX_P2 run at y=42 was clipping J9's GND pad at
+      (83,42.54). Rerouting NPX_P1/P3 around J9 by hand had left P2 (which I
+      never touched, its net assignment didn't change) still straight
+      through. Fix: let Freerouting route NPX_P2 (as it had already done
+      cleanly for P1), which also settled the JP1 bridge-field zone sliver.
+      **Also moved J7** — the auto-placer had jammed it at (52,32), directly
+      in the DFPlayer's microSD card insertion/ejection path (~3 mm south of
+      the SD-slot edge, pins tall enough to foul a card or a plugged-in
+      wire). Relocated to (46.25,40), west of the card corridor, buzzer wire
+      now exits near the left edge; BUZZER_PWM re-routed. **Board is now
+      0 DRC errors + the same 12 pre-existing cosmetic warnings.**
 - [ ] **BOM-JLC/LCSC sourcing for R8/R9/R10 not done.** `CPL-JLC.csv` and a
       regenerated `BOM-JLC.csv` (16 line items / 24 designators, up from 11/17)
       both correctly include them now, but neither has real LCSC part numbers
