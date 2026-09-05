@@ -161,6 +161,15 @@ All of the above are present in the schematic netlist.
       wire). Relocated to (46.25,40), west of the card corridor, buzzer wire
       now exits near the left edge; BUZZER_PWM re-routed. **Board is now
       0 DRC errors + the same 12 pre-existing cosmetic warnings.**
+- [x] **J1 USB-C part corrected to match the footprint (2026-09-05).** The
+      KiCad footprint `USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A` is drawn for
+      LCSC **C2894897** (HCTL — the KiCad lib cites its datasheet), but the
+      BOM was ordering **C2765186** (SHOU HAN "TYPE-C 16PIN 2MD"), a
+      different brand whose shield-tab/mounting-post positions don't match —
+      showed up as J1 "not lining up with the holes" in JLC's preview.
+      Swapped the BOM to C2894897. If it's ever out of stock, the
+      jenschr/USB-C-Connectors KiCad repo has per-LCSC-part 16P USB-C
+      footprints to match whatever's available.
 - [x] **R8/R9/R10 LCSC parts assigned (2026-09-05).** R8 = C22775
       (100 Ω 0603 1%, UNI ROYAL `0603WAF1000T5E`, JLC **Basic**),
       R9/R10 = C23162 (4.7 kΩ 0603 1%, UNI ROYAL `0603WAF4701T5E`, JLC

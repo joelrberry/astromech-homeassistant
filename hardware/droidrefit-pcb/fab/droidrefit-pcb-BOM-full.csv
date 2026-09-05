@@ -4,7 +4,7 @@
 "C5,C6,C7,C8,C9","100n","5","Capacitor_SMD:C_0603_1608Metric","C14663","CC0603KRX7R9BB104",""
 "D1","GRN","1","LED_SMD:LED_0603_1608Metric","C965804","XL-1608UGC-04",""
 "F1","PTC 2A hold / 4A trip","1","Fuse:Fuse_1812_4532Metric","C18198342","1812L200/30GR",""
-"J1","USB-C 5V in","1","Connector_USB:USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A","C2765186","TYPE-C 16PIN 2MD",""
+"J1","USB-C 5V in","1","Connector_USB:USB_C_Receptacle_HCTL_HC-TYPE-C-16P-01A","C2894897","HC-TYPE-C-16P-01A",""
 "J2","SERVO SIG/+5V/GND","1","Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical","C49257","1x3 2.54mm header","hand-solder"
 "J3","NEOPIXEL JST-SH","1","Connector_JST:JST_SH_BM03B-SRSS-TB_1x03-1MP_P1.00mm_Vertical","C160389","BM03B-SRSS-TB(LF)(SN)",""
 "J5","SPEAKER 4-8ohm","1","Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical","C131337","B2B-PH-K-S","hand-solder"
