@@ -1,12 +1,12 @@
 %TF.GenerationSoftware,KiCad,Pcbnew,10.0.5*%
-%TF.CreationDate,2026-09-05T09:08:24-07:00*%
+%TF.CreationDate,2026-09-05T09:30:40-07:00*%
 %TF.ProjectId,droidrefit-pcb,64726f69-6472-4656-9669-742d7063622e,rev?*%
 %TF.SameCoordinates,Original*%
 %TF.FileFunction,Soldermask,Top*%
 %TF.FilePolarity,Negative*%
 %FSLAX46Y46*%
 G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
-G04 Created by KiCad (PCBNEW 10.0.5) date 2026-09-05 09:08:24*
+G04 Created by KiCad (PCBNEW 10.0.5) date 2026-09-05 09:30:40*
 %MOMM*%
 %LPD*%
 G01*
@@ -245,7 +245,7 @@ X80700000Y-15000000D03*
 %TD*%
 D28*
 %TO.C,MH3*%
-X7000000Y-63000000D03*
+X4500000Y-65500000D03*
 %TD*%
 D29*
 %TO.C,F1*%
@@ -254,7 +254,7 @@ X37137500Y-60000000D03*
 %TD*%
 D28*
 %TO.C,MH1*%
-X7000000Y-7000000D03*
+X4500000Y-4500000D03*
 %TD*%
 D30*
 %TO.C,J5*%
@@ -274,7 +274,7 @@ X42825000Y-65000000D03*
 %TD*%
 D28*
 %TO.C,MH2*%
-X93000000Y-7000000D03*
+X95500000Y-4500000D03*
 %TD*%
 D32*
 %TO.C,Q1*%
@@ -328,6 +328,6 @@ X88775000Y-54000000D03*
 %TD*%
 D28*
 %TO.C,MH4*%
-X93000000Y-63000000D03*
+X95500000Y-65500000D03*
 %TD*%
 M02*

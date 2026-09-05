@@ -46,8 +46,13 @@ All of the above are present in the schematic netlist.
       (2.54 mm pitch, **15.24 mm / 0.6 in rows — confirmed from board spec**),
       NeoPixel bridge field.
 - [x] Board created from schematic — 25 footprints, 20 nets.
-- [x] Board outline 100×70 mm rounded-rect, 4× M3 mounting holes
-      (top corners, mid-left, bottom-right — offset to clear J1).
+- [x] Board outline 100×70 mm rounded-rect (3 mm corner radius), 4× M3
+      mounting holes. **Moved 2026-09-05** to a symmetric 91×61 mm pattern
+      (holes at 4.5 mm in from each edge: 4.5/4.5, 95.5/4.5, 4.5/65.5,
+      95.5/65.5) — tighter into the corners so an M3 screw+washer clears
+      J6/J2/J5 (the previous 7 mm-inset positions had MH2 courtyard-
+      overlapping J5 and MH3/MH4 crowding J6/J2). Enclosure is 3D-printed
+      and designed around wherever these land.
 - [x] Placement cleaned — functional grouping, **0 DRC errors**, 0 courtyard
       overlaps. Remaining 27 DRC warnings = 23 silk-over-copper (ref text over
       THT pads, fix in silk-polish pass) + 4 custom-footprint metadata notes.
